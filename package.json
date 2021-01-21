@@ -1,23 +1,37 @@
 {
   "name": "eco-server",
   "version": "1.0.0",
-  "engines": {
-    "node": ">=6.10.0"
-  },
-  "description": "Alternative Elm Package Server.",
+  "description": "Alternate Elm Package Server",
   "author": "Rupert Smith <github@thesett.com>",
   "license": "Apache-2.0",
   "scripts": {
-    "clobber": "rm -rf elm-stuff",
-    "rebuild": "npm run clobber && npm install && npm run build",
-    "build": "elm make --output=src/elm.js src/elm/Top.elm",
-    "start": "npm run build && node src/index.js"
+    "start": "cd api/lambda && serverless offline",
+    "deploy": "cd api/lambda && serverless deploy",
+    "undeploy": "cd api/lambda && serverless remove"
   },
   "dependencies": {
+    "@the-sett/serverless-elm-bridge": "^2.0.0",
+    "urlencode": "^1.1.0",
+    "uuid": "^3.1.0",
     "glob": "^7.1.4",
     "elm-format": "^0.8.2"
   },
   "devDependencies": {
-    "elm": "latest-0.19.1"
+    "elm": "latest-0.19.1",
+    "aws-sdk": "2.493.0",
+    "cf-utils": "^1.0.2",
+    "del": "^3.0.0",
+    "elm": "0.19.0",
+    "elm-webpack-loader": "^5.0.0",
+    "inquirer": "^3.3.0",
+    "newman": "^4.5.1",
+    "ps-list": "^4.0.0",
+    "serverless": "^1.45.1",
+    "serverless-offline": "^3.16.0",
+    "serverless-dynamodb-local": "0.2.38",
+    "serverless-webpack": "^4.1.0",
+    "vinyl-paths": "^2.1.0",
+    "webpack": "^3.8.1",
+    "webpack-stream": "^4.0.0"
   }
 }
