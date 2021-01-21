@@ -1,0 +1,5 @@
+src/elm.js
+elm-stuff
+node_modules
+*.log
+/stubs
