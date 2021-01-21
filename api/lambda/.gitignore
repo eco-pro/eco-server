@@ -4,3 +4,4 @@ elm-stuff
 node_modules
 .serverless
 *.log
+dist
