@@ -18,5 +18,5 @@ functions:
     events:
       - http:
           integration: lambda-proxy
-          path: /
+          path: /{proxy+}
           method: ANY

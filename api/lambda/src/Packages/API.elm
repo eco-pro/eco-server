@@ -10,24 +10,36 @@ import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
 
 
-main : Serverless.Program () () () ()
-main =
-    Serverless.httpApi
-        { configDecoder = Serverless.noConfig
-        , initialModel = ()
-        , parseRoute = Serverless.noRoutes
-        , update = Serverless.noSideEffects
-        , interopPorts = Serverless.noPorts
-        , endpoint = respond ( 200, textBody "Hello Elm on serverless." )
-        , requestPort = requestPort
-        , responsePort = responsePort
-        }
+
+-- Serverless program.
 
 
 port requestPort : Serverless.RequestPort msg
 
 
 port responsePort : Serverless.ResponsePort msg
+
+
+type alias Conn =
+    Serverless.Conn.Conn () () Route
+
+
+type alias Msg =
+    ()
+
+
+main : Serverless.Program () () Route Msg
+main =
+    Serverless.httpApi
+        { configDecoder = Serverless.noConfig
+        , initialModel = ()
+        , parseRoute = routeParser
+        , endpoint = router
+        , update = update
+        , interopPorts = Serverless.noPorts
+        , requestPort = requestPort
+        , responsePort = responsePort
+        }
 
 
 
@@ -48,3 +60,29 @@ routeParser =
         , map Tags (s "tags")
         ]
         |> Url.Parser.parse
+
+
+
+-- Route processing.
+
+
+router : Conn -> ( Conn, Cmd Msg )
+router conn =
+    case ( method conn, Debug.log "route" <| route conn ) of
+        ( GET, AllPackages ) ->
+            respond ( 405, textBody "Not found" ) conn
+
+        ( GET, AllPackagesSince _ ) ->
+            respond ( 404, textBody "Not found" ) conn
+
+        ( _, _ ) ->
+            respond ( 405, textBody "Method not allowed" ) conn
+
+
+
+-- Side effects.
+
+
+update : Msg -> Conn -> ( Conn, Cmd Msg )
+update seed conn =
+    ( conn, Cmd.none )
