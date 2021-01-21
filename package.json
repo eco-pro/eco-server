@@ -1,0 +1,23 @@
+{
+  "name": "eco-server",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=6.10.0"
+  },
+  "description": "Alternative Elm Package Server.",
+  "author": "Rupert Smith <github@thesett.com>",
+  "license": "Apache-2.0",
+  "scripts": {
+    "clobber": "rm -rf elm-stuff",
+    "rebuild": "npm run clobber && npm install && npm run build",
+    "build": "elm make --output=src/elm.js src/elm/Top.elm",
+    "start": "npm run build && node src/index.js"
+  },
+  "dependencies": {
+    "glob": "^7.1.4",
+    "elm-format": "^0.8.2"
+  },
+  "devDependencies": {
+    "elm": "latest-0.19.1"
+  }
+}
