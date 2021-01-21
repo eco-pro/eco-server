@@ -1,4 +1,4 @@
-port module Top exposing (main)
+module Top exposing (main)
 
 -- Top level construction
 
@@ -6,8 +6,8 @@ port module Top exposing (main)
 main : Program () Model Msg
 main =
     Platform.worker
-        { init = \_ -> ()
-        , update = \model _ -> ( model, Cmd.none )
+        { init = \_ -> ( (), Cmd.none )
+        , update = \_ model -> ( model, Cmd.none )
         , subscriptions = \_ -> Sub.none
         }
 
