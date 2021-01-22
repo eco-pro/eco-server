@@ -5,3 +5,4 @@ node_modules
 .serverless
 *.log
 dist
+index.html
