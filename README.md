@@ -22,6 +22,12 @@ Try running an elm build through it:
 ```
 https_proxy=http://127.0.0.1:8080 elm make
 ```
+# Development Roadmap
+#### (just some notes on where this is going in the immediate future)
+
+* Set up a domain with a proper certificate and deploy this onto AWS.
+
+* Download and cache all the .zip files, and service requests independently of package.elm-lang.org. At this point there is a usable backup of the main package site, useful if that is down.
 
 # eco-server
 
