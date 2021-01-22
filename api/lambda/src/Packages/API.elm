@@ -4,8 +4,9 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Serverless
-import Serverless.Conn exposing (jsonBody, method, request, respond, route, textBody)
-import Serverless.Conn.Request exposing (Method(..), Request, asJson, body)
+import Serverless.Conn exposing (method, request, respond, route)
+import Serverless.Conn.Body as Body
+import Serverless.Conn.Request exposing (Method(..), Request, body)
 import Url
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
@@ -88,7 +89,7 @@ router conn =
             ( conn, fetchEndpointJson author name version )
 
         ( _, _ ) ->
-            respond ( 405, textBody "Method not allowed" ) conn
+            respond ( 405, Body.text "Method not allowed" ) conn
 
 
 
@@ -101,34 +102,34 @@ update msg conn =
         FetchedAllPackages result ->
             case result of
                 Ok val ->
-                    respond ( 200, jsonBody val ) conn
+                    respond ( 200, Body.json val ) conn
 
                 Err err ->
-                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
         FetchedAllPackagesSince result ->
             case result of
                 Ok val ->
-                    respond ( 200, jsonBody val ) conn
+                    respond ( 200, Body.json val ) conn
 
                 Err _ ->
-                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
         FetchedElmJson result ->
             case result of
                 Ok val ->
-                    respond ( 200, jsonBody val ) conn
+                    respond ( 200, Body.json val ) conn
 
                 Err _ ->
-                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
         FetchedEndpointJson result ->
             case result of
                 Ok val ->
-                    respond ( 200, jsonBody val ) conn
+                    respond ( 200, Body.json val ) conn
 
                 Err _ ->
-                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
 
 
