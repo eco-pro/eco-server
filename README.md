@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-Set up a proxy using mitmproxy. You will need to set up its certificate authority on your system, or Elm will not manage to download through the proxy. There instructions on doing this are here: https://docs.mitmproxy.org/stable/concepts-certificates/
+Set up a proxy using mitmproxy. You will need to set up its certificate authority on your system, or Elm will not manage to download through the proxy. The instructions on doing this are here: https://docs.mitmproxy.org/stable/concepts-certificates/
 
 ```
 mitmdump --ssl-insecure -M '|https://package.elm-lang.org/|http://localhost:3000/'
@@ -22,6 +22,7 @@ Try running an elm build through it:
 ```
 https_proxy=http://127.0.0.1:8080 elm make
 ```
+
 # Development Roadmap
 #### (just some notes on where this is going in the immediate future)
 
