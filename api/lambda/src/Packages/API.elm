@@ -28,6 +28,8 @@ type alias Conn =
 type Msg
     = FetchedAllPackages (Result Http.Error Decode.Value)
     | FetchedAllPackagesSince (Result Http.Error Decode.Value)
+    | FetchedElmJson (Result Http.Error Decode.Value)
+    | FetchedEndpointJson (Result Http.Error Decode.Value)
 
 
 main : Serverless.Program () () Route Msg
@@ -51,6 +53,8 @@ main =
 type Route
     = AllPackages
     | AllPackagesSince Int
+    | ElmJson String String String
+    | EndpointJson String String String
 
 
 routeParser : Url.Url -> Maybe Route
@@ -58,6 +62,8 @@ routeParser =
     oneOf
         [ map AllPackages (s "all-packages")
         , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
+        , map ElmJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "elm.json")
+        , map EndpointJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "endpoint.json")
         ]
         |> Url.Parser.parse
 
@@ -72,8 +78,14 @@ router conn =
         ( GET, AllPackages ) ->
             ( conn, fetchAllPackages )
 
-        ( GET, AllPackagesSince since ) ->
+        ( POST, AllPackagesSince since ) ->
             ( conn, fetchAllPackagesSince since )
+
+        ( GET, ElmJson author name version ) ->
+            ( conn, fetchElmJson author name version )
+
+        ( GET, EndpointJson author name version ) ->
+            ( conn, fetchEndpointJson author name version )
 
         ( _, _ ) ->
             respond ( 405, textBody "Method not allowed" ) conn
@@ -102,6 +114,22 @@ update msg conn =
                 Err _ ->
                     respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
 
+        FetchedElmJson result ->
+            case result of
+                Ok val ->
+                    respond ( 200, jsonBody val ) conn
+
+                Err _ ->
+                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+
+        FetchedEndpointJson result ->
+            case result of
+                Ok val ->
+                    respond ( 200, jsonBody val ) conn
+
+                Err _ ->
+                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+
 
 
 -- Pass through to package.elm-lang.org
@@ -122,7 +150,24 @@ fetchAllPackages =
 
 fetchAllPackagesSince : Int -> Cmd Msg
 fetchAllPackagesSince since =
-    Http.get
+    Http.post
         { url = packageUrl ++ "all-packages/since/" ++ String.fromInt since
         , expect = Http.expectJson FetchedAllPackagesSince Decode.value
+        , body = Http.emptyBody
+        }
+
+
+fetchElmJson : String -> String -> String -> Cmd Msg
+fetchElmJson author name version =
+    Http.get
+        { url = packageUrl ++ "packages/" ++ author ++ "/" ++ name ++ "/" ++ version ++ "/elm.json"
+        , expect = Http.expectJson FetchedElmJson Decode.value
+        }
+
+
+fetchEndpointJson : String -> String -> String -> Cmd Msg
+fetchEndpointJson author name version =
+    Http.get
+        { url = packageUrl ++ "packages/" ++ author ++ "/" ++ name ++ "/" ++ version ++ "/endpoint.json"
+        , expect = Http.expectJson FetchedEndpointJson Decode.value
         }

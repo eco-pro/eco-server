@@ -10,7 +10,7 @@
     "undeploy": "cd api/lambda && serverless remove"
   },
   "dependencies": {
-    "@the-sett/serverless-elm-bridge": "^2.0.0",
+    "@the-sett/serverless-elm-bridge": "^2.0.1",
     "urlencode": "^1.1.0",
     "uuid": "^3.1.0",
     "glob": "^7.1.4",
