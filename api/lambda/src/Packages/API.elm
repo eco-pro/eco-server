@@ -1,5 +1,6 @@
 port module Packages.API exposing (main)
 
+import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Serverless
@@ -24,8 +25,9 @@ type alias Conn =
     Serverless.Conn.Conn () () Route
 
 
-type alias Msg =
-    ()
+type Msg
+    = FetchedAllPackages (Result Http.Error Decode.Value)
+    | FetchedAllPackagesSince (Result Http.Error Decode.Value)
 
 
 main : Serverless.Program () () Route Msg
@@ -49,7 +51,6 @@ main =
 type Route
     = AllPackages
     | AllPackagesSince Int
-    | Tags
 
 
 routeParser : Url.Url -> Maybe Route
@@ -57,7 +58,6 @@ routeParser =
     oneOf
         [ map AllPackages (s "all-packages")
         , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
-        , map Tags (s "tags")
         ]
         |> Url.Parser.parse
 
@@ -70,10 +70,10 @@ router : Conn -> ( Conn, Cmd Msg )
 router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         ( GET, AllPackages ) ->
-            respond ( 405, textBody "Not found" ) conn
+            ( conn, fetchAllPackages )
 
-        ( GET, AllPackagesSince _ ) ->
-            respond ( 404, textBody "Not found" ) conn
+        ( GET, AllPackagesSince since ) ->
+            ( conn, fetchAllPackagesSince since )
 
         ( _, _ ) ->
             respond ( 405, textBody "Method not allowed" ) conn
@@ -84,5 +84,45 @@ router conn =
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
-update seed conn =
-    ( conn, Cmd.none )
+update msg conn =
+    case Debug.log "update" msg of
+        FetchedAllPackages result ->
+            case result of
+                Ok val ->
+                    respond ( 200, jsonBody val ) conn
+
+                Err err ->
+                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+
+        FetchedAllPackagesSince result ->
+            case result of
+                Ok val ->
+                    respond ( 200, jsonBody val ) conn
+
+                Err _ ->
+                    respond ( 500, textBody "Got error when trying to contact package.elm-lang.com." ) conn
+
+
+
+-- Pass through to package.elm-lang.org
+
+
+packageUrl : String
+packageUrl =
+    "https://package.elm-lang.org/"
+
+
+fetchAllPackages : Cmd Msg
+fetchAllPackages =
+    Http.get
+        { url = packageUrl ++ "all-packages/"
+        , expect = Http.expectJson FetchedAllPackages Decode.value
+        }
+
+
+fetchAllPackagesSince : Int -> Cmd Msg
+fetchAllPackagesSince since =
+    Http.get
+        { url = packageUrl ++ "all-packages/since/" ++ String.fromInt since
+        , expect = Http.expectJson FetchedAllPackagesSince Decode.value
+        }
