@@ -2,7 +2,7 @@ service: eco-server
 
 provider:
   name: aws
-  runtime: nodejs8.10
+  runtime: nodejs12.x
   profile: default
   region: eu-west-2
   environment:
@@ -45,16 +45,13 @@ resources:
       Properties:
         AttributeDefinitions:
           -
-            AttributeName: author
-            AttributeType: S
-          -
-            AttributeName: name
+            AttributeName: coords
             AttributeType: S
         KeySchema:
           -
-            AttributeName: author
+            AttributeName: coords
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: realworld-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-packages
+        TableName: eco-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-packages
