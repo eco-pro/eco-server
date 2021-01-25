@@ -1,10 +1,25 @@
-service: elm-serverless-demo
+service: eco-server
 
 provider:
   name: aws
   runtime: nodejs8.10
+  profile: default
+  region: eu-west-2
+  environment:
+    DYNAMODB_NAMESPACE: ${opt:stage, "dev"}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/*"
 
 plugins:
+  - serverless-dynamodb-local
   - serverless-webpack
   - serverless-offline
 
@@ -20,3 +35,26 @@ functions:
           integration: lambda-proxy
           path: /{proxy+}
           method: ANY
+
+resources:
+  Resources:
+
+    ElmPackagesDynamoDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: author
+            AttributeType: S
+          -
+            AttributeName: name
+            AttributeType: S
+        KeySchema:
+          -
+            AttributeName: author
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: realworld-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-packages
