@@ -5,6 +5,10 @@ import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
 
 
+
+-- Put a document in DynamoDB
+
+
 type alias Put a =
     { tableName : String
     , item : a
@@ -25,6 +29,10 @@ put encoder table val conn =
 
 
 port dynamoPut : InteropRequestPort Value msg
+
+
+
+-- Listen for results of DynamoDB operations.
 
 
 port dynamoOk : InteropResponsePort msg
