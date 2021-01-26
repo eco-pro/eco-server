@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "start": "cd api/lambda && serverless offline",
+    "devdb": "cd api/lambda && sls dynamodb start --migrate --stage dev",
     "deploy": "cd api/lambda && serverless deploy",
     "undeploy": "cd api/lambda && serverless remove"
   },
@@ -24,7 +25,7 @@
     "ps-list": "^4.0.0",
     "serverless": "^1.45.1",
     "serverless-offline": "^3.16.0",
-    "serverless-dynamodb-local": "0.2.38",
+    "serverless-dynamodb-local": "0.2.39",
     "serverless-webpack": "^4.1.0",
     "vinyl-paths": "^2.1.0",
     "webpack": "^3.8.1",
