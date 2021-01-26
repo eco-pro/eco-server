@@ -8,7 +8,7 @@ import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
 import Parser exposing (Parser)
 import Serverless
-import Serverless.Conn exposing (method, request, respond, route)
+import Serverless.Conn as Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
 import Serverless.Conn.Request exposing (Method(..), Request, body)
 import Time exposing (Posix)
@@ -28,7 +28,7 @@ port responsePort : Serverless.ResponsePort msg
 
 
 type alias Conn =
-    Serverless.Conn.Conn () () Route
+    Conn.Conn Config () Route
 
 
 type Msg
@@ -40,10 +40,10 @@ type Msg
     | DynamoOk Decode.Value
 
 
-main : Serverless.Program () () Route Msg
+main : Serverless.Program Config () Route Msg
 main =
     Serverless.httpApi
-        { configDecoder = Serverless.noConfig
+        { configDecoder = configDecoder
         , initialModel = ()
         , parseRoute = routeParser
         , endpoint = router
@@ -52,6 +52,21 @@ main =
         , requestPort = requestPort
         , responsePort = responsePort
         }
+
+
+
+-- Configuration
+
+
+type alias Config =
+    { dynamoDbNamespace : String
+    }
+
+
+configDecoder : Decoder Config
+configDecoder =
+    Decode.field "DYNAMODB_NAMESPACE" Decode.string
+        |> Decode.map Config
 
 
 
@@ -188,7 +203,13 @@ saveAllPackages conn =
 
 saveSeqNo : Int -> Conn -> ( Conn, Cmd Msg )
 saveSeqNo seqNo conn =
-    ( conn, Dynamo.put elmSeqDynamoDBTableEncoder "eco-dev-elm-seq" { seq = seqNo, updatedAt = Time.millisToPosix 0 } conn )
+    ( conn
+    , Dynamo.put
+        elmSeqDynamoDBTableEncoder
+        ("eco-" ++ (Conn.config conn).dynamoDbNamespace ++ "-elm-seq")
+        { seq = seqNo, updatedAt = Time.millisToPosix 0 }
+        conn
+    )
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )
