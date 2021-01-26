@@ -11,7 +11,9 @@ import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
 import Serverless.Conn.Request exposing (Method(..), Request, body)
+import Task
 import Time exposing (Posix)
+import Tuple
 import Url
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
@@ -36,7 +38,7 @@ type Msg
     | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | RefreshPackages Int (Result Http.Error (List FQPackage))
+    | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
     | DynamoOk Decode.Value
 
 
@@ -105,7 +107,7 @@ router conn =
             ( conn, RootSite.fetchAllPackages PassthroughAllPackages )
 
         ( POST, AllPackagesSince since ) ->
-            ( conn, RootSite.fetchAllPackagesSince PassthroughAllPackagesSince since )
+            ( conn, RootSite.fetchAllPackagesSince since |> Task.attempt PassthroughAllPackagesSince )
 
         ( GET, ElmJson author name version ) ->
             ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
@@ -115,13 +117,17 @@ router conn =
 
         -- The enhanced API
         ( GET, AllPackagesSince since ) ->
-            ( conn, RootSite.fetchAllPackagesSince PassthroughAllPackagesSince since )
+            ( conn, RootSite.fetchAllPackagesSince since |> Task.attempt PassthroughAllPackagesSince )
 
         ( GET, Refresh ) ->
             -- Query the table to see what we know about.
             -- If its empty, refresh since 0.
             -- If its got stuff, refresh since what we know about.
-            ( conn, RootSite.fetchAllPackagesSince (RefreshPackages 11350) 11350 )
+            ( conn
+            , RootSite.fetchAllPackagesSince 11350
+                |> Task.map2 Tuple.pair Time.now
+                |> Task.attempt (RefreshPackages 11350)
+            )
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -168,7 +174,7 @@ update msg conn =
 
         RefreshPackages from result ->
             case result of
-                Ok packageList ->
+                Ok ( timestamp, packageList ) ->
                     -- Save the package list to the table.
                     -- Trigger the processing jobs to populate them all.
                     let
@@ -177,7 +183,7 @@ update msg conn =
                     in
                     ( conn, Cmd.none )
                         |> andThen saveAllPackages
-                        |> andThen (saveSeqNo seqNo)
+                        |> andThen (saveSeqNo timestamp seqNo)
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
@@ -201,13 +207,15 @@ saveAllPackages conn =
     ( conn, Cmd.none )
 
 
-saveSeqNo : Int -> Conn -> ( Conn, Cmd Msg )
-saveSeqNo seqNo conn =
+saveSeqNo : Posix -> Int -> Conn -> ( Conn, Cmd Msg )
+saveSeqNo timestamp seqNo conn =
     ( conn
     , Dynamo.put
         elmSeqDynamoDBTableEncoder
-        ((Conn.config conn).dynamoDbNamespace ++ "-eco-elm-seq")
-        { seq = seqNo, updatedAt = Time.millisToPosix 0 }
+        (fqTableName "eco-elm-seq" conn)
+        { seq = seqNo
+        , updatedAt = timestamp
+        }
         conn
     )
 
@@ -219,6 +227,11 @@ createdOk conn =
 
 
 -- DynamoDB Tables
+
+
+fqTableName : String -> Conn -> String
+fqTableName name conn =
+    (Conn.config conn).dynamoDbNamespace ++ "-" ++ name
 
 
 type alias ElmSeqDynamoDBTable =
