@@ -206,7 +206,7 @@ saveSeqNo seqNo conn =
     ( conn
     , Dynamo.put
         elmSeqDynamoDBTableEncoder
-        ("eco-" ++ (Conn.config conn).dynamoDbNamespace ++ "-elm-seq")
+        ((Conn.config conn).dynamoDbNamespace ++ "-eco-elm-seq")
         { seq = seqNo, updatedAt = Time.millisToPosix 0 }
         conn
     )

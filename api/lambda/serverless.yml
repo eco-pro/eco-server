@@ -57,7 +57,7 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: eco-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-seq
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-elm-seq
 
     ElmPackagesDynamoDBTable:
       Type: 'AWS::DynamoDB::Table'
@@ -77,7 +77,7 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: eco-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-packages
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-elm-packages
         GlobalSecondaryIndexes:
           -
             IndexName: coords
