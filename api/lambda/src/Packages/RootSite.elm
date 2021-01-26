@@ -7,6 +7,7 @@ module Packages.RootSite exposing
 
 import Http
 import Json.Decode as Decode
+import Packages.FQPackage as FQPackage exposing (FQPackage)
 
 
 packageUrl : String
@@ -22,11 +23,11 @@ fetchAllPackages tagger =
         }
 
 
-fetchAllPackagesSince : (Result Http.Error Decode.Value -> msg) -> Int -> Cmd msg
+fetchAllPackagesSince : (Result Http.Error (List FQPackage) -> msg) -> Int -> Cmd msg
 fetchAllPackagesSince tagger since =
     Http.post
         { url = packageUrl ++ "all-packages/since/" ++ String.fromInt since
-        , expect = Http.expectJson tagger Decode.value
+        , expect = Http.expectJson tagger (Decode.list FQPackage.decoder)
         , body = Http.emptyBody
         }
 

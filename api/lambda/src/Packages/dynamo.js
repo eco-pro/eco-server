@@ -27,7 +27,9 @@ DynamoDBPorts.prototype.subscribe =
       if (app.ports[upsertPackageSeqPortName]) {
         app.ports[upsertPackageSeqPortName].subscribe(args => {
           const connectionId = args[0];
-          console.log("Invoked upsertPackageSeqPort");
+          const seqNo = args[1];
+
+          console.log("Save seq no: " + seqNo);
           dynamoOkPort.send([connectionId, "ok"]);
         });
       } else {

@@ -4,7 +4,7 @@ import Json.Encode as JE
 import Serverless
 
 
-port upsertPackageSeq : Serverless.InteropRequestPort () msg
+port upsertPackageSeq : Serverless.InteropRequestPort Int msg
 
 
 port dynamoOk : Serverless.InteropResponsePort msg

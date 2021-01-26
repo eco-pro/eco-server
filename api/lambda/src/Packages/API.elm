@@ -4,7 +4,9 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Packages.Dynamo as Dynamo
+import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
+import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
@@ -30,10 +32,10 @@ type alias Conn =
 
 type Msg
     = PassthroughAllPackages (Result Http.Error Decode.Value)
-    | PassthroughAllPackagesSince (Result Http.Error Decode.Value)
+    | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | RefreshPackages (Result Http.Error Decode.Value)
+    | RefreshPackages Int (Result Http.Error (List FQPackage))
     | DynamoOk Decode.Value
 
 
@@ -82,6 +84,7 @@ routeParser =
 router : Conn -> ( Conn, Cmd Msg )
 router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
+        -- The original package site API
         ( GET, AllPackages ) ->
             ( conn, RootSite.fetchAllPackages PassthroughAllPackages )
 
@@ -94,11 +97,15 @@ router conn =
         ( GET, EndpointJson author name version ) ->
             ( conn, RootSite.fetchEndpointJson PassthroughEndpointJson author name version )
 
+        -- The enhanced API
+        ( GET, AllPackagesSince since ) ->
+            ( conn, RootSite.fetchAllPackagesSince PassthroughAllPackagesSince since )
+
         ( GET, Refresh ) ->
             -- Query the table to see what we know about.
             -- If its empty, refresh since 0.
             -- If its got stuff, refresh since what we know about.
-            ( conn, RootSite.fetchAllPackagesSince RefreshPackages 0 )
+            ( conn, RootSite.fetchAllPackagesSince (RefreshPackages 11350) 11350 )
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -122,7 +129,7 @@ update msg conn =
         PassthroughAllPackagesSince result ->
             case result of
                 Ok val ->
-                    respond ( 200, Body.json val ) conn
+                    respond ( 200, Body.json (Encode.list FQPackage.encode val) ) conn
 
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
@@ -143,13 +150,18 @@ update msg conn =
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        RefreshPackages result ->
+        RefreshPackages from result ->
             case result of
-                Ok val ->
+                Ok packageList ->
                     -- Save the package list to the table.
                     -- Trigger the processing jobs to populate them all.
+                    let
+                        seqNo =
+                            List.length packageList + from
+                    in
                     ( conn, Cmd.none )
                         |> andThen saveAllPackages
+                        |> andThen (saveSeqNo seqNo)
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
@@ -170,7 +182,12 @@ andThen fn ( model, cmd ) =
 
 saveAllPackages : Conn -> ( Conn, Cmd Msg )
 saveAllPackages conn =
-    ( conn, Serverless.interop Dynamo.upsertPackageSeq () conn )
+    ( conn, Cmd.none )
+
+
+saveSeqNo : Int -> Conn -> ( Conn, Cmd Msg )
+saveSeqNo seqNo conn =
+    ( conn, Serverless.interop Dynamo.upsertPackageSeq seqNo conn )
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )
