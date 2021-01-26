@@ -26,6 +26,9 @@ plugins:
 custom:
   serverless-offline:
     dontPrintOutput: true
+  dynamodb:
+    stages:
+      - dev
 
 functions:
   packages:
