@@ -31,7 +31,7 @@ fetchAllPackagesSince since =
         , headers = []
         , url = packageUrl ++ "all-packages/since/" ++ String.fromInt since
         , body = Http.emptyBody
-        , resolver = jsonResolver (Decode.list FQPackage.decoder) |> Http.stringResolver
+        , resolver = jsonResolver (Decode.list FQPackage.decoder)
         , timeout = Nothing
         }
 
@@ -52,25 +52,33 @@ fetchEndpointJson tagger author name version =
         }
 
 
-jsonResolver : Decoder a -> Response String -> Result Http.Error a
-jsonResolver decoder response =
-    case response of
-        Http.BadUrl_ url ->
-            Err (Http.BadUrl url)
 
-        Http.Timeout_ ->
-            Err Http.Timeout
+-- Helpers
 
-        Http.NetworkError_ ->
-            Err Http.NetworkError
 
-        Http.BadStatus_ metadata body ->
-            Err (Http.BadStatus metadata.statusCode)
+jsonResolver : Decoder a -> Http.Resolver Http.Error a
+jsonResolver decoder =
+    let
+        decodeResponse response =
+            case response of
+                Http.BadUrl_ url ->
+                    Err (Http.BadUrl url)
 
-        Http.GoodStatus_ metadata body ->
-            case Decode.decodeString decoder body of
-                Ok value ->
-                    Ok value
+                Http.Timeout_ ->
+                    Err Http.Timeout
 
-                Err err ->
-                    Err (Http.BadBody (Decode.errorToString err))
+                Http.NetworkError_ ->
+                    Err Http.NetworkError
+
+                Http.BadStatus_ metadata body ->
+                    Err (Http.BadStatus metadata.statusCode)
+
+                Http.GoodStatus_ metadata body ->
+                    case Decode.decodeString decoder body of
+                        Ok value ->
+                            Ok value
+
+                        Err err ->
+                            Err (Http.BadBody (Decode.errorToString err))
+    in
+    decodeResponse |> Http.stringResolver
