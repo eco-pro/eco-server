@@ -39,19 +39,51 @@ functions:
 resources:
   Resources:
 
-    ElmPackagesDynamoDBTable:
+    ElmSeqDynamoDBTable:
       Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Retain
+      DeletionPolicy: Delete
       Properties:
         AttributeDefinitions:
+          -
+            AttributeName: seq
+            AttributeType: I
+        KeySchema:
+          -
+            AttributeName: seq
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: eco-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-seq
+
+    ElmPackagesDynamoDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: seq
+            AttributeType: I
           -
             AttributeName: coords
             AttributeType: S
         KeySchema:
           -
-            AttributeName: coords
+            AttributeName: seq
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: eco-${self:provider.environment.DYNAMODB_NAMESPACE}-elm-packages
+        GlobalSecondaryIndexes:
+          -
+            IndexName: coords
+            KeySchema:
+              -
+                AttributeName: coords
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1

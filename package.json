@@ -11,10 +11,7 @@
   },
   "dependencies": {
     "@the-sett/serverless-elm-bridge": "^3.0.0",
-    "urlencode": "^1.1.0",
-    "uuid": "^3.1.0",
-    "glob": "^7.1.4",
-    "elm-format": "^0.8.2"
+    "aws-sdk": "2.493.0"
   },
   "devDependencies": {
     "elm": "latest-0.19.1",

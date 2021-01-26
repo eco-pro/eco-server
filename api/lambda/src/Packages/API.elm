@@ -3,6 +3,7 @@ port module Packages.API exposing (main)
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Packages.Dynamo as Dynamo
 import Serverless
 import Serverless.Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
@@ -27,10 +28,12 @@ type alias Conn =
 
 
 type Msg
-    = FetchedAllPackages (Result Http.Error Decode.Value)
-    | FetchedAllPackagesSince (Result Http.Error Decode.Value)
-    | FetchedElmJson (Result Http.Error Decode.Value)
-    | FetchedEndpointJson (Result Http.Error Decode.Value)
+    = PassthroughAllPackages (Result Http.Error Decode.Value)
+    | PassthroughAllPackagesSince (Result Http.Error Decode.Value)
+    | PassthroughElmJson (Result Http.Error Decode.Value)
+    | PassthroughEndpointJson (Result Http.Error Decode.Value)
+    | RefreshAllPackages (Result Http.Error Decode.Value)
+    | DynamoOk Decode.Value
 
 
 main : Serverless.Program () () Route Msg
@@ -41,7 +44,7 @@ main =
         , parseRoute = routeParser
         , endpoint = router
         , update = update
-        , interopPorts = Serverless.noPorts
+        , interopPorts = [ ( Dynamo.dynamoOk, Decode.map DynamoOk Decode.value ) ]
         , requestPort = requestPort
         , responsePort = responsePort
         }
@@ -56,6 +59,7 @@ type Route
     | AllPackagesSince Int
     | ElmJson String String String
     | EndpointJson String String String
+    | Refresh
 
 
 routeParser : Url.Url -> Maybe Route
@@ -65,6 +69,7 @@ routeParser =
         , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
         , map ElmJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "elm.json")
         , map EndpointJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "endpoint.json")
+        , map Refresh (s "refresh")
         ]
         |> Url.Parser.parse
 
@@ -77,7 +82,7 @@ router : Conn -> ( Conn, Cmd Msg )
 router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         ( GET, AllPackages ) ->
-            ( conn, fetchAllPackages )
+            ( conn, fetchAllPackages PassthroughAllPackages )
 
         ( POST, AllPackagesSince since ) ->
             ( conn, fetchAllPackagesSince since )
@@ -87,6 +92,12 @@ router conn =
 
         ( GET, EndpointJson author name version ) ->
             ( conn, fetchEndpointJson author name version )
+
+        ( GET, Refresh ) ->
+            -- Query the table to see what we know about.
+            -- If its empty, refresh all packages.
+            -- If its got stuff, refresh since.
+            ( conn, fetchAllPackages RefreshAllPackages )
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -99,7 +110,7 @@ router conn =
 update : Msg -> Conn -> ( Conn, Cmd Msg )
 update msg conn =
     case Debug.log "update" msg of
-        FetchedAllPackages result ->
+        PassthroughAllPackages result ->
             case result of
                 Ok val ->
                     respond ( 200, Body.json val ) conn
@@ -107,7 +118,7 @@ update msg conn =
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        FetchedAllPackagesSince result ->
+        PassthroughAllPackagesSince result ->
             case result of
                 Ok val ->
                     respond ( 200, Body.json val ) conn
@@ -115,7 +126,7 @@ update msg conn =
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        FetchedElmJson result ->
+        PassthroughElmJson result ->
             case result of
                 Ok val ->
                     respond ( 200, Body.json val ) conn
@@ -123,13 +134,47 @@ update msg conn =
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        FetchedEndpointJson result ->
+        PassthroughEndpointJson result ->
             case result of
                 Ok val ->
                     respond ( 200, Body.json val ) conn
 
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+
+        RefreshAllPackages result ->
+            case result of
+                Ok val ->
+                    -- Save the package list to the table.
+                    -- Trigger the processing jobs to populate them all.
+                    ( conn, Cmd.none )
+                        |> andThen saveAllPackages
+
+                Err err ->
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+
+        DynamoOk _ ->
+            ( conn, Cmd.none )
+                |> andThen createdOk
+
+
+andThen : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
+andThen fn ( model, cmd ) =
+    let
+        ( nextModel, nextCmd ) =
+            fn model
+    in
+    ( nextModel, Cmd.batch [ cmd, nextCmd ] )
+
+
+saveAllPackages : Conn -> ( Conn, Cmd Msg )
+saveAllPackages conn =
+    ( conn, Serverless.interop Dynamo.upsertPackageSeq () conn )
+
+
+createdOk : Conn -> ( Conn, Cmd Msg )
+createdOk conn =
+    respond ( 201, Body.empty ) conn
 
 
 
@@ -141,11 +186,11 @@ packageUrl =
     "https://package.elm-lang.org/"
 
 
-fetchAllPackages : Cmd Msg
-fetchAllPackages =
+fetchAllPackages : (Result Http.Error Decode.Value -> Msg) -> Cmd Msg
+fetchAllPackages tagger =
     Http.get
         { url = packageUrl ++ "all-packages/"
-        , expect = Http.expectJson FetchedAllPackages Decode.value
+        , expect = Http.expectJson tagger Decode.value
         }
 
 
@@ -153,7 +198,7 @@ fetchAllPackagesSince : Int -> Cmd Msg
 fetchAllPackagesSince since =
     Http.post
         { url = packageUrl ++ "all-packages/since/" ++ String.fromInt since
-        , expect = Http.expectJson FetchedAllPackagesSince Decode.value
+        , expect = Http.expectJson PassthroughAllPackagesSince Decode.value
         , body = Http.emptyBody
         }
 
@@ -162,7 +207,7 @@ fetchElmJson : String -> String -> String -> Cmd Msg
 fetchElmJson author name version =
     Http.get
         { url = packageUrl ++ "packages/" ++ author ++ "/" ++ name ++ "/" ++ version ++ "/elm.json"
-        , expect = Http.expectJson FetchedElmJson Decode.value
+        , expect = Http.expectJson PassthroughElmJson Decode.value
         }
 
 
@@ -170,5 +215,5 @@ fetchEndpointJson : String -> String -> String -> Cmd Msg
 fetchEndpointJson author name version =
     Http.get
         { url = packageUrl ++ "packages/" ++ author ++ "/" ++ name ++ "/" ++ version ++ "/endpoint.json"
-        , expect = Http.expectJson FetchedEndpointJson Decode.value
+        , expect = Http.expectJson PassthroughEndpointJson Decode.value
         }
