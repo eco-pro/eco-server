@@ -11,6 +11,7 @@
             "elm/json": "1.1.3",
             "elm/parser": "1.1.0",
             "elm/project-metadata-utils": "1.0.1",
+            "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "the-sett/elm-serverless": "3.0.0"
         },
@@ -18,8 +19,7 @@
             "NoRedInk/elm-json-decode-pipeline": "1.0.0",
             "elm/bytes": "1.0.8",
             "elm/file": "1.0.5",
-            "elm/random": "1.0.0",
-            "elm/time": "1.0.0"
+            "elm/random": "1.0.0"
         }
     },
     "test-dependencies": {

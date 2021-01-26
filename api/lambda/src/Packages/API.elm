@@ -2,7 +2,7 @@ port module Packages.API exposing (main)
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
+import Json.Encode as Encode exposing (Value)
 import Packages.Dynamo as Dynamo
 import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
@@ -11,6 +11,7 @@ import Serverless
 import Serverless.Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
 import Serverless.Conn.Request exposing (Method(..), Request, body)
+import Time exposing (Posix)
 import Url
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
@@ -187,9 +188,27 @@ saveAllPackages conn =
 
 saveSeqNo : Int -> Conn -> ( Conn, Cmd Msg )
 saveSeqNo seqNo conn =
-    ( conn, Serverless.interop Dynamo.upsertPackageSeq seqNo conn )
+    ( conn, Dynamo.put elmSeqDynamoDBTableEncoder "eco-dev-elm-seq" { seq = seqNo, updatedAt = Time.millisToPosix 0 } conn )
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )
 createdOk conn =
     respond ( 201, Body.empty ) conn
+
+
+
+-- DynamoDB Tables
+
+
+type alias ElmSeqDynamoDBTable =
+    { seq : Int
+    , updatedAt : Posix
+    }
+
+
+elmSeqDynamoDBTableEncoder : ElmSeqDynamoDBTable -> Value
+elmSeqDynamoDBTableEncoder record =
+    Encode.object
+        [ ( "seq", Encode.int record.seq )
+        , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
+        ]

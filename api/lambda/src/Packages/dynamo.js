@@ -16,43 +16,36 @@ DocumentClient = new AWS.DynamoDB.DocumentClient();
 var DynamoDBPorts = function() {};
 
 DynamoDBPorts.prototype.subscribe =
-  function(app, upsertPackageSeqPortName, dynamoOkPortName) {
+  function(app, dynamoPutPortName, dynamoOkPortName) {
 
-    if (!upsertPackageSeqPortName) upsertPackageSeqPortName = "getItem";
+    if (!dynamoPutPortName) dynamoPutPortName = "dynamoPut";
 
     if (app.ports[dynamoOkPortName]) {
 
       var dynamoOkPort = app.ports[dynamoOkPortName];
 
-      if (app.ports[upsertPackageSeqPortName]) {
-        app.ports[upsertPackageSeqPortName].subscribe(args => {
+      if (app.ports[dynamoPutPortName]) {
+        app.ports[dynamoPutPortName].subscribe(args => {
           const connectionId = args[0];
-          const seqNo = args[1];
-          console.log("Save seq no: " + seqNo);
-          //dynamoOkPort.send([connectionId, "ok"]);
+          const params = args[1];
 
-          const timestamp = new Date().getTime();
-
-          const params = {
-            TableName: "eco-" + process.env.DYNAMODB_NAMESPACE + "-elm-seq",
-            Item: {
-              seq: seqNo,
-              updatedAt: timestamp
-            }
-          }
+          console.log("dynamoPut: Invoked");
+          console.log(params);
 
           DocumentClient.put(params, (error, result) => {
             if (error) {
+              console.log("dynamoPut: Error");
               console.error(error);
-              dynamoOkPort.send([connectionId, "ok"]);
+              dynamoOkPort.send([connectionId, "error"]);
               return;
             }
 
+            console.log("dynamoPut: Ok")
             dynamoOkPort.send([connectionId, "ok"]);
           });
         });
       } else {
-        console.warn("The " + upsertPackageSeqPortName + " port is not connected.");
+        console.warn("The " + dynamoPutPortName + " port is not connected.");
       }
 
     } else {

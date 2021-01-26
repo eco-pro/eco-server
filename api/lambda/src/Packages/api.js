@@ -16,4 +16,4 @@ module.exports.handler = elmServerless.httpApi({
 
 // Subscribe to DynamoDB Ports.
 const dynamoPorts = new DynamoDBPorts();
-dynamoPorts.subscribe(app, "upsertPackageSeq", "dynamoOk");
+dynamoPorts.subscribe(app, "dynamoPut", "dynamoOk");
