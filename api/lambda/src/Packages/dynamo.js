@@ -28,9 +28,28 @@ DynamoDBPorts.prototype.subscribe =
         app.ports[upsertPackageSeqPortName].subscribe(args => {
           const connectionId = args[0];
           const seqNo = args[1];
-
           console.log("Save seq no: " + seqNo);
-          dynamoOkPort.send([connectionId, "ok"]);
+          //dynamoOkPort.send([connectionId, "ok"]);
+
+          const timestamp = new Date().getTime();
+
+          const params = {
+            TableName: "eco-" + process.env.DYNAMODB_NAMESPACE + "-elm-seq",
+            Item: {
+              seq: seqNo,
+              updatedAt: timestamp
+            }
+          }
+
+          DocumentClient.put(params, (error, result) => {
+            if (error) {
+              console.error(error);
+              dynamoOkPort.send([connectionId, "ok"]);
+              return;
+            }
+
+            dynamoOkPort.send([connectionId, "ok"]);
+          });
         });
       } else {
         console.warn("The " + upsertPackageSeqPortName + " port is not connected.");

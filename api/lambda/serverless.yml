@@ -19,7 +19,6 @@ provider:
       Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/*"
 
 plugins:
-  - serverless-dynamodb-local
   - serverless-webpack
   - serverless-offline
 
@@ -46,7 +45,7 @@ resources:
         AttributeDefinitions:
           -
             AttributeName: seq
-            AttributeType: I
+            AttributeType: N
         KeySchema:
           -
             AttributeName: seq
@@ -63,7 +62,7 @@ resources:
         AttributeDefinitions:
           -
             AttributeName: seq
-            AttributeType: I
+            AttributeType: N
           -
             AttributeName: coords
             AttributeType: S
