@@ -1,6 +1,7 @@
 port module Packages.Dynamo exposing
     ( put, get, GetResponse(..)
-    , dynamoPutPort, dynamoGetPort, dynamoResponsePort
+    , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
+    , dynamoResponsePort
     )
 
 {-| A wrapper around the AWS DynamoDB Document API.
@@ -13,7 +14,8 @@ port module Packages.Dynamo exposing
 
 # Ports
 
-@docs dynamoPutPort, dynamoGetPort, dynamoResponsePort
+@docs dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
+@docs @dopcs dynamoResponsePort
 
 -}
 
@@ -34,6 +36,12 @@ port dynamoGetPort : InteropRequestPort Value msg
 
 
 port dynamoPutPort : InteropRequestPort Value msg
+
+
+port dynamoBatchPutPort : InteropRequestPort Value msg
+
+
+port dynamoBatchGetPort : InteropRequestPort Value msg
 
 
 
@@ -144,6 +152,53 @@ buildGetResponseMsg responseFn decoder val =
 
 
 
+-- Batch Put
+
+
+type alias BatchPut a =
+    { tableName : String
+    , items : List a
+    }
+
+
+batchPutEncoder : (a -> Value) -> BatchPut a -> Value
+batchPutEncoder encoder putOp =
+    let
+        encodeItem item =
+            Encode.object
+                [ ( "PutRequest"
+                  , Encode.object
+                        [ ( "Item", encoder item ) ]
+                  )
+                ]
+    in
+    Encode.object
+        [ ( "RequestItems"
+          , Encode.object
+                [ ( putOp.tableName
+                  , Encode.list encodeItem putOp.items
+                  )
+                ]
+          )
+        ]
+
+
+batchPut :
+    String
+    -> (a -> Value)
+    -> List a
+    -> (Value -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+batchPut table encoder vals responseDecoder conn =
+    Serverless.interop
+        dynamoBatchPutPort
+        (batchPutEncoder encoder { tableName = table, items = vals })
+        responseDecoder
+        conn
+
+
+
 -- Batch get
 -- var params = {
 --     RequestItems: {
@@ -157,4 +212,3 @@ buildGetResponseMsg responseFn decoder val =
 --         }
 --     }
 -- };
--- Batch write
