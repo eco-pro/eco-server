@@ -65,28 +65,13 @@ resources:
       Properties:
         AttributeDefinitions:
           -
-            AttributeName: seq
-            AttributeType: N
-          -
-            AttributeName: coords
+            AttributeName: name
             AttributeType: S
         KeySchema:
           -
-            AttributeName: seq
+            AttributeName: name
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-elm-packages
-        GlobalSecondaryIndexes:
-          -
-            IndexName: coords
-            KeySchema:
-              -
-                AttributeName: coords
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-            ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1

@@ -1,5 +1,6 @@
 port module Packages.API exposing (main)
 
+import Elm.Version
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -292,6 +293,41 @@ elmSeqDynamoDBTableKeyEncoder : ElmSeqDynamoDBTableKey -> Value
 elmSeqDynamoDBTableKeyEncoder record =
     Encode.object
         [ ( "label", Encode.string record.label )
+        ]
+
+
+type alias ElmPackagesDynamoDBTable =
+    { name : String
+    , versions : List Elm.Version.Version
+    , updatedAt : Posix
+    }
+
+
+type alias ElmPackagesDynamoDBTableKey =
+    { name : String }
+
+
+elmPackagesDynamoDBTableEncoder : ElmPackagesDynamoDBTable -> Value
+elmPackagesDynamoDBTableEncoder record =
+    Encode.object
+        [ ( "name", Encode.string record.name )
+        , ( "versions", Encode.list Elm.Version.encode record.versions )
+        , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
+        ]
+
+
+elmPackagesDynamoDBTableDecoder : Decoder ElmPackagesDynamoDBTable
+elmPackagesDynamoDBTableDecoder =
+    Decode.succeed ElmPackagesDynamoDBTable
+        |> decodeAndMap (Decode.field "name" Decode.string)
+        |> decodeAndMap (Decode.field "versions" (Decode.list Elm.Version.decoder))
+        |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
+
+
+elmPackagesDynamoDBTableKeyEncoder : ElmPackagesDynamoDBTableKey -> Value
+elmPackagesDynamoDBTableKeyEncoder record =
+    Encode.object
+        [ ( "name", Encode.string record.name )
         ]
 
 
