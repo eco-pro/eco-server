@@ -1,5 +1,5 @@
 port module Packages.Dynamo exposing
-    ( put
+    ( put, get, GetResponse(..)
     , dynamoPutPort, dynamoGetPort, dynamoResponsePort
     )
 
@@ -8,7 +8,7 @@ port module Packages.Dynamo exposing
 
 # Database Operations
 
-@docs put, get
+@docs put, get, GetResponse
 
 
 # Ports
@@ -21,6 +21,19 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
+
+
+
+-- Port definitions.
+
+
+port dynamoResponsePort : InteropResponsePort msg
+
+
+port dynamoGetPort : InteropRequestPort Value msg
+
+
+port dynamoPutPort : InteropRequestPort Value msg
 
 
 
@@ -42,21 +55,18 @@ putEncoder encoder putOp =
 
 
 put :
-    (a -> Value)
-    -> String
+    String
+    -> (a -> Value)
     -> a
     -> (Value -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-put encoder table val responseDecoder conn =
+put table encoder val responseDecoder conn =
     Serverless.interop
         dynamoPutPort
         (putEncoder encoder { tableName = table, item = val })
         responseDecoder
         conn
-
-
-port dynamoPutPort : InteropRequestPort Value msg
 
 
 
@@ -69,6 +79,28 @@ type alias Get k =
     }
 
 
+type GetResponse a
+    = Item a
+    | ItemNotFound
+    | Error String
+
+
+get :
+    String
+    -> (k -> Value)
+    -> k
+    -> Decoder a
+    -> (GetResponse a -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+get table encoder key decoder responseFn conn =
+    Serverless.interop
+        dynamoGetPort
+        (getEncoder encoder { tableName = table, key = key })
+        (buildGetResponseMsg responseFn (getResponseDecoder decoder))
+        conn
+
+
 getEncoder : (k -> Value) -> Get k -> Value
 getEncoder encoder getOp =
     Encode.object
@@ -77,37 +109,35 @@ getEncoder encoder getOp =
         ]
 
 
-get :
-    (k -> Value)
-    -> String
-    -> k
-    -> Decoder a
-    -> (a -> msg)
-    -> (Value -> msg)
-    -> Conn config model route msg
-    -> ( Conn config model route msg, Cmd msg )
-get encoder table key decoder tagger responseDecoder conn =
-    Serverless.interop
-        dynamoGetPort
-        (getEncoder encoder { tableName = table, key = key })
-        responseDecoder
-        conn
+getResponseDecoder : Decoder a -> Decoder (GetResponse a)
+getResponseDecoder decoder =
+    Decode.field "type_" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "Item" ->
+                        Decode.at [ "item", "Item" ] decoder
+                            |> Decode.map Item
+
+                    "ItemNotFound" ->
+                        Decode.succeed ItemNotFound
+
+                    _ ->
+                        Decode.succeed (Error "error")
+            )
 
 
-port dynamoGetPort : InteropRequestPort Value msg
+buildGetResponseMsg : (GetResponse a -> msg) -> Decoder (GetResponse a) -> Value -> msg
+buildGetResponseMsg responseFn decoder val =
+    let
+        result =
+            Decode.decodeValue decoder val
+                |> Result.map responseFn
+                |> Result.mapError (Decode.errorToString >> Error >> responseFn)
+    in
+    case result of
+        Ok ok ->
+            ok
 
-
-
--- Listen for results of DynamoDB operations.
-
-
-port dynamoResponsePort : InteropResponsePort msg
-
-
-{-| The possible DynamoDB operation responses.
--}
-type Response
-    = Item String Value
-    | ItemNotFound String
-    | KeyList (List String)
-    | Error String
+        Err err ->
+            err

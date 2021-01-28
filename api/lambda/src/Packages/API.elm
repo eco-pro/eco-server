@@ -108,14 +108,7 @@ router conn =
             ( conn, RootSite.fetchAllPackagesSince since |> Task.attempt PassthroughAllPackagesSince )
 
         ( GET, Refresh ) ->
-            -- Query the table to see what we know about.
-            -- If its empty, refresh since 0.
-            -- If its got stuff, refresh since what we know about.
-            ( conn
-            , RootSite.fetchAllPackagesSince 11350
-                |> Task.map2 Tuple.pair Time.now
-                |> Task.attempt (RefreshPackages 11350)
-            )
+            loadSeqNo CheckSeqNo conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -130,8 +123,9 @@ type Msg
     | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
+    | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | SeqNoSaved
+    | SeqNoSaved Int
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -169,6 +163,25 @@ update msg conn =
                 Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
+        CheckSeqNo loadResult ->
+            case loadResult of
+                Dynamo.Item record ->
+                    ( conn
+                    , RootSite.fetchAllPackagesSince record.seq
+                        |> Task.map2 Tuple.pair Time.now
+                        |> Task.attempt (RefreshPackages record.seq)
+                    )
+
+                Dynamo.ItemNotFound ->
+                    ( conn
+                    , RootSite.fetchAllPackagesSince 0
+                        |> Task.map2 Tuple.pair Time.now
+                        |> Task.attempt (RefreshPackages 0)
+                    )
+
+                Dynamo.Error dbErrorMsg ->
+                    error dbErrorMsg conn
+
         RefreshPackages from result ->
             case result of
                 Ok ( timestamp, packageList ) ->
@@ -180,16 +193,12 @@ update msg conn =
                     in
                     ( conn, Cmd.none )
                         |> andThen saveAllPackages
-                        |> andThen (saveSeqNo timestamp seqNo (always SeqNoSaved))
+                        |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        SeqNoSaved ->
-            let
-                _ =
-                    Debug.log "update" "Sequence number saved ok."
-            in
+        SeqNoSaved seqNo ->
             ( conn, Cmd.none )
                 |> andThen createdOk
 
@@ -208,11 +217,22 @@ saveAllPackages conn =
     ( conn, Cmd.none )
 
 
+loadSeqNo : (Dynamo.GetResponse ElmSeqDynamoDBTable -> Msg) -> Conn -> ( Conn, Cmd Msg )
+loadSeqNo responseFn conn =
+    Dynamo.get
+        (fqTableName "eco-elm-seq" conn)
+        elmSeqDynamoDBTableKeyEncoder
+        { label = "latest" }
+        elmSeqDynamoDBTableDecoder
+        responseFn
+        conn
+
+
 saveSeqNo : Posix -> Int -> (Value -> Msg) -> Conn -> ( Conn, Cmd Msg )
 saveSeqNo timestamp seqNo responseDecoder conn =
     Dynamo.put
-        elmSeqDynamoDBTableEncoder
         (fqTableName "eco-elm-seq" conn)
+        elmSeqDynamoDBTableEncoder
         { label = "latest"
         , seq = seqNo
         , updatedAt = timestamp
@@ -224,6 +244,11 @@ saveSeqNo timestamp seqNo responseDecoder conn =
 createdOk : Conn -> ( Conn, Cmd Msg )
 createdOk conn =
     respond ( 201, Body.empty ) conn
+
+
+error : String -> Conn -> ( Conn, Cmd Msg )
+error msg conn =
+    respond ( 500, Body.text msg ) conn
 
 
 
@@ -242,6 +267,10 @@ type alias ElmSeqDynamoDBTable =
     }
 
 
+type alias ElmSeqDynamoDBTableKey =
+    { label : String }
+
+
 elmSeqDynamoDBTableEncoder : ElmSeqDynamoDBTable -> Value
 elmSeqDynamoDBTableEncoder record =
     Encode.object
@@ -249,3 +278,27 @@ elmSeqDynamoDBTableEncoder record =
         , ( "seq", Encode.int record.seq )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
         ]
+
+
+elmSeqDynamoDBTableDecoder : Decoder ElmSeqDynamoDBTable
+elmSeqDynamoDBTableDecoder =
+    Decode.succeed ElmSeqDynamoDBTable
+        |> decodeAndMap (Decode.field "label" Decode.string)
+        |> decodeAndMap (Decode.field "seq" Decode.int)
+        |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
+
+
+elmSeqDynamoDBTableKeyEncoder : ElmSeqDynamoDBTableKey -> Value
+elmSeqDynamoDBTableKeyEncoder record =
+    Encode.object
+        [ ( "label", Encode.string record.label )
+        ]
+
+
+
+-- Helpers
+
+
+decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b
+decodeAndMap =
+    Decode.map2 (|>)

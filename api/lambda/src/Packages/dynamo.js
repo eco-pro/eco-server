@@ -15,18 +15,29 @@ let DocumentClient = new AWS.DynamoDB.DocumentClient();
 // --- DynamoDB Operations.
 
 let dynamoGet = (responsePort, correlationId, interopId, params) => {
-  console.log("dynamoGet: Invoked");
-  console.log(params);
+  // console.log("dynamoGet: Invoked");
+  // console.log(params);
 
   DocumentClient.get(params, (error, result) => {
+    var getResponse;
+
     if (error) {
-      console.log("dynamoGet: Error");
-      console.error(error);
-      responsePort.send([correlationId, interopId, "error"]);
+      //console.error(error);
+      getResponse = {
+        type_: "Error"
+      };
+    } else if (Object.entries(result).length === 0) {
+      getResponse = {
+        type_: "ItemNotFound"
+      }
     } else {
-      console.log("dynamoGet: Ok")
-      responsePort.send([correlationId, interopId, "ok"]);
+      getResponse = {
+        type_: "Item",
+        item: result
+      }
     }
+    
+    responsePort.send([correlationId, interopId, getResponse]);
   });
 }
 
