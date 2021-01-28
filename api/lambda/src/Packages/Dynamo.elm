@@ -141,3 +141,20 @@ buildGetResponseMsg responseFn decoder val =
 
         Err err ->
             err
+
+
+
+-- Batch get
+-- var params = {
+--     RequestItems: {
+--         'dev-eco-elm-seq': {
+--             Keys: [
+--                 {
+--                     label: 'latest'
+--                 }
+--
+--             ]
+--         }
+--     }
+-- };
+-- Batch write
