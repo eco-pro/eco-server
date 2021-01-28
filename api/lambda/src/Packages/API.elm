@@ -126,6 +126,8 @@ type Msg
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
+    | FetchedPackagesToUpdate Int Posix
+    | PackagesSaved Int Posix
     | SeqNoSaved Int
 
 
@@ -187,19 +189,26 @@ update msg conn =
             case result of
                 Ok ( timestamp, packageList ) ->
                     -- Save the package list to the table.
-                    -- Trigger the processing jobs to populate them all.
                     let
                         seqNo =
                             List.length packageList + from
                     in
                     ( conn, Cmd.none )
-                        |> andThen saveAllPackages
-                        |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
+                        |> andThen (saveAllPackages timestamp [] (PackagesSaved seqNo timestamp |> always))
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
+        FetchedPackagesToUpdate seqNo timestamp ->
+            ( conn, Cmd.none )
+
+        PackagesSaved seqNo timestamp ->
+            ( conn, Cmd.none )
+                |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
+
         SeqNoSaved seqNo ->
+            -- Trigger the processing jobs to populate them all.
+            -- Signal back to the caller that the request completed ok.
             ( conn, Cmd.none )
                 |> andThen createdOk
 
@@ -213,8 +222,13 @@ andThen fn ( model, cmd ) =
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
 
 
-saveAllPackages : Conn -> ( Conn, Cmd Msg )
-saveAllPackages conn =
+saveAllPackages :
+    Posix
+    -> List ElmPackagesDynamoDBTable
+    -> (Value -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
+saveAllPackages timestamp packages responseFn conn =
     ( conn, Cmd.none )
 
 
