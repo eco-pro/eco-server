@@ -11,7 +11,7 @@
     "undeploy": "cd api/lambda && serverless remove"
   },
   "dependencies": {
-    "@the-sett/serverless-elm-bridge": "^3.0.0",
+    "@the-sett/serverless-elm-bridge": "^4.0.0",
     "aws-sdk": "2.493.0"
   },
   "devDependencies": {

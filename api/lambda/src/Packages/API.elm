@@ -30,16 +30,7 @@ port responsePort : Serverless.ResponsePort msg
 
 
 type alias Conn =
-    Conn.Conn Config () Route
-
-
-type Msg
-    = PassthroughAllPackages (Result Http.Error Decode.Value)
-    | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
-    | PassthroughElmJson (Result Http.Error Decode.Value)
-    | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | DynamoOk Decode.Value
+    Conn.Conn Config () Route Msg
 
 
 main : Serverless.Program Config () Route Msg
@@ -50,13 +41,14 @@ main =
         , parseRoute = routeParser
         , endpoint = router
         , update = update
-        , interopPorts = [ ( Dynamo.dynamoOk, Decode.map DynamoOk Decode.value ) ]
+        , interopPorts = [ Dynamo.dynamoResponsePort ]
         , requestPort = requestPort
         , responsePort = responsePort
         }
 
 
 
+--, Decode.map DynamoOk Decode.value
 -- Configuration
 
 
@@ -95,10 +87,6 @@ routeParser =
         |> Url.Parser.parse
 
 
-
--- Route processing.
-
-
 router : Conn -> ( Conn, Cmd Msg )
 router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
@@ -135,6 +123,16 @@ router conn =
 
 
 -- Side effects.
+
+
+type Msg
+    = PassthroughAllPackages (Result Http.Error Decode.Value)
+    | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
+    | PassthroughElmJson (Result Http.Error Decode.Value)
+    | PassthroughEndpointJson (Result Http.Error Decode.Value)
+    | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
+    | DynamoOk Decode.Value
+    | SeqNoSaved
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -183,7 +181,7 @@ update msg conn =
                     in
                     ( conn, Cmd.none )
                         |> andThen saveAllPackages
-                        |> andThen (saveSeqNo timestamp seqNo)
+                        |> andThen (saveSeqNo timestamp seqNo (always SeqNoSaved))
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
@@ -191,6 +189,13 @@ update msg conn =
         DynamoOk _ ->
             ( conn, Cmd.none )
                 |> andThen createdOk
+
+        SeqNoSaved ->
+            let
+                _ =
+                    Debug.log "update" "Sequence number saved ok."
+            in
+            ( conn, Cmd.none )
 
 
 andThen : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
@@ -207,17 +212,17 @@ saveAllPackages conn =
     ( conn, Cmd.none )
 
 
-saveSeqNo : Posix -> Int -> Conn -> ( Conn, Cmd Msg )
-saveSeqNo timestamp seqNo conn =
-    ( conn
-    , Dynamo.put
+saveSeqNo : Posix -> Int -> (Value -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveSeqNo timestamp seqNo responseDecoder conn =
+    Dynamo.put
         elmSeqDynamoDBTableEncoder
         (fqTableName "eco-elm-seq" conn)
-        { seq = seqNo
+        { label = "latest"
+        , seq = seqNo
         , updatedAt = timestamp
         }
+        responseDecoder
         conn
-    )
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )
@@ -235,7 +240,8 @@ fqTableName name conn =
 
 
 type alias ElmSeqDynamoDBTable =
-    { seq : Int
+    { label : String
+    , seq : Int
     , updatedAt : Posix
     }
 
@@ -243,6 +249,7 @@ type alias ElmSeqDynamoDBTable =
 elmSeqDynamoDBTableEncoder : ElmSeqDynamoDBTable -> Value
 elmSeqDynamoDBTableEncoder record =
     Encode.object
-        [ ( "seq", Encode.int record.seq )
+        [ ( "label", Encode.string record.label )
+        , ( "seq", Encode.int record.seq )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
         ]

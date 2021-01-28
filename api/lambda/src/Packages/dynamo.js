@@ -1,7 +1,7 @@
 const AWS = require('aws-sdk');
 
-// In offline mode, use DynamoDB local server
-let DocumentClient = null;
+// --- Get a DynamoDB DocumentClient to access it through.
+// In serverless offline mode, this will use a local server.
 
 if (process.env.IS_OFFLINE) {
   AWS.config.update({
@@ -10,49 +10,101 @@ if (process.env.IS_OFFLINE) {
   });
 }
 
-// Get a handle to access DynamoDB through.
-DocumentClient = new AWS.DynamoDB.DocumentClient();
+let DocumentClient = new AWS.DynamoDB.DocumentClient();
+
+// --- DynamoDB Operations.
+
+let dynamoGet = (responsePort, correlationId, interopId, params) => {
+  console.log("dynamoGet: Invoked");
+  console.log(params);
+
+  DocumentClient.get(params, (error, result) => {
+    if (error) {
+      console.log("dynamoGet: Error");
+      console.error(error);
+      responsePort.send([correlationId, interopId, "error"]);
+    } else {
+      console.log("dynamoGet: Ok")
+      responsePort.send([correlationId, interopId, "ok"]);
+    }
+  });
+}
+
+let dynamoPut = (responsePort, correlationId, interopId, params) => {
+  console.log("dynamoPut: Invoked");
+  console.log(params);
+
+  DocumentClient.put(params, (error, result) => {
+    if (error) {
+      console.log("dynamoPut: Error");
+      console.error(error);
+      responsePort.send([correlationId, interopId, "error"]);
+    } else {
+      console.log("dynamoPut: Ok")
+      responsePort.send([correlationId, interopId, result]);
+    }
+  });
+}
+
+let dynamoUpdate = (responsePort, correlationId, interopId, params) => {
+  console.log("dynamoUpdate: Invoked");
+  console.log(params);
+
+  DocumentClient.get(params, (error, result) => {
+    if (error) {
+      console.log("dynamoUpdate: Error");
+      console.error(error);
+      responsePort.send([correlationId, interopId, "error"]);
+    } else {
+      console.log("dynamoUpdate: Ok")
+      responsePort.send([correlationId, interopId, result]);
+    }
+  });
+}
+
+// --- Provide a function for wiring all the ports up by Elm port name.
 
 var DynamoDBPorts = function() {};
 
 DynamoDBPorts.prototype.subscribe =
-  function(app, dynamoPutPortName, dynamoOkPortName) {
+  function(
+    app,
+    dynamoGetPortName,
+    dynamoPutPortName,
+    dynamoResponsePortName
+  ) {
 
-    if (!dynamoPutPortName) dynamoPutPortName = "dynamoPut";
+    if (!dynamoGetPortName)
+      dynamoGetPortName = "dynamoGetPort";
 
-    if (app.ports[dynamoOkPortName]) {
+    if (!dynamoPutPortName)
+      dynamoPutPortName = "dynamoPutPort";
 
-      var dynamoOkPort = app.ports[dynamoOkPortName];
+    if (!dynamoResponsePortName)
+      dynamoResponsePortName = "dynamoResponsePort";
 
-      if (app.ports[dynamoPutPortName]) {
-        app.ports[dynamoPutPortName].subscribe(args => {
-          const connectionId = args[0];
-          const params = args[1];
-
-          console.log("dynamoPut: Invoked");
-          console.log(params);
-
-          DocumentClient.put(params, (error, result) => {
-            if (error) {
-              console.log("dynamoPut: Error");
-              console.error(error);
-              dynamoOkPort.send([connectionId, "error"]);
-              return;
-            }
-
-            console.log("dynamoPut: Ok")
-            dynamoOkPort.send([connectionId, "ok"]);
-          });
-        });
-      } else {
-        console.warn("The " + dynamoPutPortName + " port is not connected.");
-      }
-
+    if (app.ports[dynamoResponsePortName]) {
+      var dynamoResponsePort = app.ports[dynamoResponsePortName];
     } else {
-      console.warn("The " + dynamoOkPortName + " port is not connected.");
+      console.warn("The " + dynamoResponsePortName + " port is not connected.");
+    }
+
+    if (app.ports[dynamoGetPortName]) {
+      app.ports[dynamoGetPortName].subscribe(args => {
+        dynamoGet(dynamoResponsePort, args[0], args[1], args[2]);
+      });
+    } else {
+      console.warn("The " + dynamoGetPortName + " port is not connected.");
+    }
+
+    if (app.ports[dynamoPutPortName]) {
+      app.ports[dynamoPutPortName].subscribe(args => {
+        dynamoPut(dynamoResponsePort, args[0], args[1], args[2]);
+      });
+    } else {
+      console.warn("The " + dynamoPutPortName + " port is not connected.");
     }
   };
-
 
 module.exports = {
   DynamoDBPorts

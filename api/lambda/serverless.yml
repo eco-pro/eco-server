@@ -48,11 +48,11 @@ resources:
       Properties:
         AttributeDefinitions:
           -
-            AttributeName: seq
-            AttributeType: N
+            AttributeName: label
+            AttributeType: S
         KeySchema:
           -
-            AttributeName: seq
+            AttributeName: label
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
