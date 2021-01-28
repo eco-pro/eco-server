@@ -131,7 +131,6 @@ type Msg
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | DynamoOk Decode.Value
     | SeqNoSaved
 
 
@@ -186,16 +185,13 @@ update msg conn =
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        DynamoOk _ ->
-            ( conn, Cmd.none )
-                |> andThen createdOk
-
         SeqNoSaved ->
             let
                 _ =
                     Debug.log "update" "Sequence number saved ok."
             in
             ( conn, Cmd.none )
+                |> andThen createdOk
 
 
 andThen : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
