@@ -41,18 +41,23 @@ type Msg msg
     = BatchPutLoop (List Value) (Value -> msg)
 
 
-type alias Model =
-    ()
+type Model
+    = DynamoModel
 
 
 init : Model
 init =
-    ()
+    DynamoModel
 
 
-update : Msg msg -> Model -> ( Model, Cmd (Msg msg) )
+update : Msg msg -> Model -> ( Model, Cmd (Msg msg), Maybe (Cmd msg) )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        BatchPutLoop [] responseFn ->
+            ( model, Cmd.none, Nothing )
+
+        BatchPutLoop remainder responseFn ->
+            ( model, Cmd.none, Nothing )
 
 
 
@@ -230,11 +235,24 @@ batchPut :
     String
     -> (a -> Value)
     -> List a
-    -> (List a -> msg)
     -> (Value -> msg)
-    -> Conn config model route msg
-    -> ( Conn config model route msg, Cmd msg )
-batchPut table encoder vals loopFn responseFn conn =
+    -> Conn config model route (Msg msg)
+    -> ( Conn config model route (Msg msg), Cmd (Msg msg) )
+batchPut table encoder vals responseFn conn =
+    let
+        encodedVals =
+            List.map encoder vals
+    in
+    batchPutInner table encodedVals responseFn conn
+
+
+batchPutInner :
+    String
+    -> List Value
+    -> (Value -> msg)
+    -> Conn config model route (Msg msg)
+    -> ( Conn config model route (Msg msg), Cmd (Msg msg) )
+batchPutInner table vals responseFn conn =
     let
         firstBatch =
             List.take 25 vals
@@ -244,26 +262,19 @@ batchPut table encoder vals loopFn responseFn conn =
     in
     Serverless.interop
         dynamoBatchPutPort
-        (batchPutEncoder encoder { tableName = table, items = firstBatch })
-        (\val ->
-            case remainder of
-                [] ->
-                    responseFn val
-
-                _ ->
-                    loopFn remainder
-        )
+        (batchPutEncoder { tableName = table, items = firstBatch })
+        (\val -> BatchPutLoop remainder responseFn)
         conn
 
 
-batchPutEncoder : (a -> Value) -> BatchPut a -> Value
-batchPutEncoder encoder putOp =
+batchPutEncoder : BatchPut Value -> Value
+batchPutEncoder putOp =
     let
         encodeItem item =
             Encode.object
                 [ ( "PutRequest"
                   , Encode.object
-                        [ ( "Item", encoder item ) ]
+                        [ ( "Item", item ) ]
                   )
                 ]
     in
