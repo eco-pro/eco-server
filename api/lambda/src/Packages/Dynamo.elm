@@ -84,31 +84,28 @@ put table encoder val responseFn conn =
     Serverless.interop
         dynamoPutPort
         (putEncoder encoder { tableName = table, item = val })
-        (buildPutResponseMsg responseFn putResponseDecoder)
+        (putResponseDecoder >> responseFn)
         conn
 
 
-putResponseDecoder : Decoder PutResponse
-putResponseDecoder =
-    Decode.field "type_" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Ok" ->
-                        Decode.succeed PutOk
-
-                    _ ->
-                        Decode.succeed (PutError "error")
-            )
-
-
-buildPutResponseMsg : (PutResponse -> msg) -> Decoder PutResponse -> Value -> msg
-buildPutResponseMsg responseFn decoder val =
+putResponseDecoder : Value -> PutResponse
+putResponseDecoder val =
     let
+        decoder =
+            Decode.field "type_" Decode.string
+                |> Decode.andThen
+                    (\type_ ->
+                        case type_ of
+                            "Ok" ->
+                                Decode.succeed PutOk
+
+                            _ ->
+                                Decode.succeed (PutError "error")
+                    )
+
         result =
             Decode.decodeValue decoder val
-                |> Result.map responseFn
-                |> Result.mapError (Decode.errorToString >> PutError >> responseFn)
+                |> Result.mapError (Decode.errorToString >> PutError)
     in
     case result of
         Ok ok ->
@@ -119,6 +116,20 @@ buildPutResponseMsg responseFn decoder val =
 
 
 
+-- buildPutResponseMsg : (PutResponse -> msg) -> Decoder PutResponse -> Value -> msg
+-- buildPutResponseMsg responseFn decoder val =
+--     let
+--         result =
+--             Decode.decodeValue decoder val
+--                 |> Result.map responseFn
+--                 |> Result.mapError (Decode.errorToString >> PutError >> responseFn)
+--     in
+--     case result of
+--         Ok ok ->
+--             ok
+--
+--         Err err ->
+--             err
 -- Get a document from DynamoDB
 
 
@@ -206,8 +217,8 @@ batchPut :
     String
     -> (a -> Value)
     -> List a
-    -> (List a -> msg)
-    -> (Value -> msg)
+    -> (PutResponse -> List a -> msg)
+    -> (PutResponse -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
 batchPut table encoder vals loopFn responseFn conn =
@@ -224,10 +235,10 @@ batchPut table encoder vals loopFn responseFn conn =
         (\val ->
             case remainder of
                 [] ->
-                    responseFn val
+                    (putResponseDecoder >> responseFn) val
 
                 _ ->
-                    loopFn remainder
+                    loopFn (putResponseDecoder val) remainder
         )
         conn
 

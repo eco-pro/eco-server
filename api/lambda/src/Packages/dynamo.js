@@ -80,11 +80,19 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
 
 let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
   DocumentClient.batchWrite(params, (error, result) => {
+    var putResponse;
+
     if (error) {
-      responsePort.send([correlationId, interopId, "error"]);
+      putResponse = {
+        type_: "Error"
+      };
     } else {
-      responsePort.send([correlationId, interopId, result]);
+      putResponse = {
+        type_: "Ok"
+      }
     }
+
+    responsePort.send([correlationId, interopId, putResponse]);
   });
 }
 
