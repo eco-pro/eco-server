@@ -4,6 +4,7 @@ port module Packages.Dynamo exposing
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
+    , query, keyExpression, QueryResponse
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
     , dynamoResponsePort
     )
@@ -22,6 +23,7 @@ port module Packages.Dynamo exposing
 @docs get, GetResponse
 @docs batchGet, BatchGetResponse
 @docs batchPut
+@docs query, keyExpression, QueryResponse
 
 
 # Ports
@@ -376,3 +378,31 @@ buildBatchGetResponseMsg responseFn decoder val =
 
         Err err ->
             err
+
+
+
+-- Queries
+
+
+type alias QueryResponse a =
+    BatchGetResponse a
+
+
+type KeyExpression
+    = KeyExpression
+
+
+keyExpression : KeyExpression
+keyExpression =
+    KeyExpression
+
+
+query :
+    String
+    -> KeyExpression
+    -> Decoder a
+    -> (QueryResponse a -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+query =
+    Debug.todo "query"

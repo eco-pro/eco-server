@@ -294,6 +294,24 @@ andThen fn ( model, cmd ) =
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
 
 
+loadPackagesSince :
+    Int
+    -> (Dynamo.QueryResponse ElmPackagesDynamoDBTable -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
+loadPackagesSince seqNo responseFn conn =
+    let
+        keyExpression =
+            ()
+    in
+    Dynamo.query
+        (fqTableName "eco-elm-packages" conn)
+        Dynamo.keyExpression
+        elmPackagesDynamoDBTableDecoder
+        responseFn
+        conn
+
+
 saveAllPackages :
     Posix
     -> List ElmPackagesDynamoDBTable
@@ -308,22 +326,6 @@ saveAllPackages timestamp packages responseFn conn =
         DynamoMsg
         responseFn
         conn
-
-
-
--- loadPackagesByName :
---     List ElmPackagesDynamoDBTableKey
---     -> (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable -> Msg)
---     -> Conn
---     -> ( Conn, Cmd Msg )
--- loadPackagesByName packageNames responseFn conn =
---     Dynamo.batchGet
---         (fqTableName "eco-elm-packages" conn)
---         elmPackagesDynamoDBTableKeyEncoder
---         packageNames
---         elmPackagesDynamoDBTableDecoder
---         responseFn
---         conn
 
 
 loadSeqNo : (Dynamo.GetResponse ElmSeqDynamoDBTable -> Msg) -> Conn -> ( Conn, Cmd Msg )
