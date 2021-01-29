@@ -129,6 +129,7 @@ type Msg
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
+    | SavePackagesLoop Int Posix (List ElmPackagesDynamoDBTable)
     | PackagesSave Int Posix
     | SeqNoSave Int Dynamo.PutResponse
 
@@ -153,6 +154,9 @@ customLogger msg =
 
         RefreshPackages seqNo _ ->
             "RefreshPackages " ++ String.fromInt seqNo
+
+        SavePackagesLoop seqNo _ _ ->
+            "SavePackagesLoop " ++ String.fromInt seqNo
 
         PackagesSave seqNo _ ->
             "PackagesSave " ++ String.fromInt seqNo
@@ -242,21 +246,23 @@ update msg conn =
                                     (saveAllPackages
                                         timestamp
                                         packageTableEntries
+                                        (SavePackagesLoop seqNo timestamp)
                                         (PackagesSave seqNo timestamp |> always)
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        -- SavePackagesLoop seqNo timestamp morePackages ->
-        --     ( conn, Cmd.none )
-        --         |> andThen
-        --             (saveAllPackages
-        --                 timestamp
-        --                 morePackages
-        --                 (SavePackagesLoop seqNo timestamp)
-        --                 (PackagesSave seqNo timestamp |> always)
-        --             )
+        SavePackagesLoop seqNo timestamp morePackages ->
+            ( conn, Cmd.none )
+                |> andThen
+                    (saveAllPackages
+                        timestamp
+                        morePackages
+                        (SavePackagesLoop seqNo timestamp)
+                        (PackagesSave seqNo timestamp |> always)
+                    )
+
         PackagesSave seqNo timestamp ->
             ( conn, Cmd.none )
                 |> andThen (saveSeqNo timestamp seqNo (SeqNoSave seqNo))
@@ -285,14 +291,16 @@ andThen fn ( model, cmd ) =
 saveAllPackages :
     Posix
     -> List ElmPackagesDynamoDBTable
+    -> (List ElmPackagesDynamoDBTable -> Msg)
     -> (Value -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
-saveAllPackages timestamp packages responseFn conn =
+saveAllPackages timestamp packages loopFn responseFn conn =
     Dynamo.batchPut
         (fqTableName "eco-elm-packages" conn)
         elmPackagesDynamoDBTableEncoder
         packages
+        loopFn
         responseFn
         conn
 

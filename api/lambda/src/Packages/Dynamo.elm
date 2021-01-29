@@ -1,6 +1,5 @@
 port module Packages.Dynamo exposing
-    ( Msg, Model, init, update
-    , put, PutResponse(..)
+    ( put, PutResponse(..)
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
@@ -9,11 +8,6 @@ port module Packages.Dynamo exposing
     )
 
 {-| A wrapper around the AWS DynamoDB Document API.
-
-
-# TEA model.
-
-@docs Msg, Model, init, update
 
 
 # Database Operations
@@ -35,29 +29,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
-
-
-type Msg msg
-    = BatchPutLoop (List Value) (Value -> msg)
-
-
-type Model
-    = DynamoModel
-
-
-init : Model
-init =
-    DynamoModel
-
-
-update : Msg msg -> Model -> ( Model, Cmd (Msg msg), Maybe (Cmd msg) )
-update msg model =
-    case msg of
-        BatchPutLoop [] responseFn ->
-            ( model, Cmd.none, Nothing )
-
-        BatchPutLoop remainder responseFn ->
-            ( model, Cmd.none, Nothing )
 
 
 
@@ -235,24 +206,11 @@ batchPut :
     String
     -> (a -> Value)
     -> List a
+    -> (List a -> msg)
     -> (Value -> msg)
-    -> Conn config model route (Msg msg)
-    -> ( Conn config model route (Msg msg), Cmd (Msg msg) )
-batchPut table encoder vals responseFn conn =
-    let
-        encodedVals =
-            List.map encoder vals
-    in
-    batchPutInner table encodedVals responseFn conn
-
-
-batchPutInner :
-    String
-    -> List Value
-    -> (Value -> msg)
-    -> Conn config model route (Msg msg)
-    -> ( Conn config model route (Msg msg), Cmd (Msg msg) )
-batchPutInner table vals responseFn conn =
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+batchPut table encoder vals loopFn responseFn conn =
     let
         firstBatch =
             List.take 25 vals
@@ -262,19 +220,26 @@ batchPutInner table vals responseFn conn =
     in
     Serverless.interop
         dynamoBatchPutPort
-        (batchPutEncoder { tableName = table, items = firstBatch })
-        (\val -> BatchPutLoop remainder responseFn)
+        (batchPutEncoder encoder { tableName = table, items = firstBatch })
+        (\val ->
+            case remainder of
+                [] ->
+                    responseFn val
+
+                _ ->
+                    loopFn remainder
+        )
         conn
 
 
-batchPutEncoder : BatchPut Value -> Value
-batchPutEncoder putOp =
+batchPutEncoder : (a -> Value) -> BatchPut a -> Value
+batchPutEncoder encoder putOp =
     let
         encodeItem item =
             Encode.object
                 [ ( "PutRequest"
                   , Encode.object
-                        [ ( "Item", item ) ]
+                        [ ( "Item", encoder item ) ]
                   )
                 ]
     in
