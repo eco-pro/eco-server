@@ -244,13 +244,8 @@ update msg conn =
                                     List.length newPackageList + from
 
                                 packageTableEntries =
-                                    List.indexedMap
-                                        (\idx package ->
-                                            { package = package
-                                            , seqNo = idx + from
-                                            , updatedAt = timestamp
-                                            }
-                                        )
+                                    List.map
+                                        (\{ name, version } -> { name = name, version = version, updatedAt = timestamp })
                                         newPackageList
                             in
                             ( conn, Cmd.none )
@@ -407,23 +402,23 @@ elmSeqDynamoDBTableKeyEncoder record =
 
 
 type alias ElmPackagesDynamoDBTable =
-    { package : FQPackage
-    , seqNo : Int
+    { name : Elm.Package.Name
+    , version : Elm.Version.Version
     , updatedAt : Posix
     }
 
 
 type alias ElmPackagesDynamoDBTableKey =
-    { package : FQPackage
-    , seqNo : Int
+    { name : Elm.Package.Name
+    , version : Elm.Version.Version
     }
 
 
 elmPackagesDynamoDBTableEncoder : ElmPackagesDynamoDBTable -> Value
 elmPackagesDynamoDBTableEncoder record =
     Encode.object
-        [ ( "package", FQPackage.encode record.package )
-        , ( "seqNo", Encode.int record.seqNo )
+        [ ( "name", Elm.Package.encode record.name )
+        , ( "version", Elm.Version.encode record.version )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
         ]
 
@@ -431,16 +426,16 @@ elmPackagesDynamoDBTableEncoder record =
 elmPackagesDynamoDBTableDecoder : Decoder ElmPackagesDynamoDBTable
 elmPackagesDynamoDBTableDecoder =
     Decode.succeed ElmPackagesDynamoDBTable
-        |> decodeAndMap (Decode.field "package" FQPackage.decoder)
-        |> decodeAndMap (Decode.field "seqNo" Decode.int)
+        |> decodeAndMap (Decode.field "name" Elm.Package.decoder)
+        |> decodeAndMap (Decode.field "version" Elm.Version.decoder)
         |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
 
 
 elmPackagesDynamoDBTableKeyEncoder : ElmPackagesDynamoDBTableKey -> Value
 elmPackagesDynamoDBTableKeyEncoder record =
     Encode.object
-        [ ( "package", FQPackage.encode record.package )
-        , ( "seqNo", Encode.int record.seqNo )
+        [ ( "name", Elm.Package.encode record.name )
+        , ( "version", Elm.Version.encode record.version )
         ]
 
 
