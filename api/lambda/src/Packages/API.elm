@@ -129,14 +129,49 @@ type Msg
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | FetchedPackagesToUpdate Int Posix (List FQPackage) (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable)
-    | PackagesSaved Int Posix
+    | SaveLoop Int Posix (List ElmPackagesDynamoDBTable)
+    | PackagesSave Int Posix
     | SeqNoSaved Int
+
+
+customLogger : Msg -> String
+customLogger msg =
+    case msg of
+        PassthroughAllPackages _ ->
+            "PassthroughAllPackages"
+
+        PassthroughAllPackagesSince _ ->
+            "PassthroughAllPackagesSince"
+
+        PassthroughElmJson _ ->
+            "PassthroughElmJson"
+
+        PassthroughEndpointJson _ ->
+            "PassthroughEndpointJson"
+
+        CheckSeqNo _ ->
+            "CheckSeqNo"
+
+        RefreshPackages seqNo _ ->
+            "RefreshPackages " ++ String.fromInt seqNo
+
+        SaveLoop seqNo _ _ ->
+            "SaveLoop " ++ String.fromInt seqNo
+
+        PackagesSave seqNo _ ->
+            "PackagesSave " ++ String.fromInt seqNo
+
+        SeqNoSaved seqNo ->
+            "SeqNoSaved " ++ String.fromInt seqNo
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
 update msg conn =
-    case Debug.log "update" msg of
+    let
+        _ =
+            Debug.log "update" (customLogger msg)
+    in
+    case msg of
         PassthroughAllPackages result ->
             case result of
                 Ok val ->
@@ -173,18 +208,16 @@ update msg conn =
             case loadResult of
                 Dynamo.Item record ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 11450
-                        -- record.seq
+                    , RootSite.fetchAllPackagesSince record.seq
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 11450)
-                      --record.seq)
+                        |> Task.attempt (RefreshPackages record.seq)
                     )
 
                 Dynamo.ItemNotFound ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 11450
+                    , RootSite.fetchAllPackagesSince 0
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 11450)
+                        |> Task.attempt (RefreshPackages 0)
                     )
 
                 Dynamo.Error dbErrorMsg ->
@@ -192,61 +225,45 @@ update msg conn =
 
         RefreshPackages from result ->
             case result of
-                Ok ( timestamp, packageList ) ->
-                    case packageList of
+                Ok ( timestamp, newPackageList ) ->
+                    case newPackageList of
                         [] ->
                             ( conn, Cmd.none )
                                 |> andThen createdOk
 
                         _ ->
-                            -- Load any existing packages that are in the list of new packages.
                             let
                                 seqNo =
-                                    List.length packageList + from
+                                    List.length newPackageList + from
 
-                                packageNames =
-                                    List.map (\{ name } -> Elm.Package.toString name) packageList
-                                        |> Set.fromList
-                                        |> Set.toList
-                                        |> List.map (\name -> { name = name })
+                                packageTableEntries =
+                                    List.map
+                                        (\{ name, version } -> { name = name, version = version, updatedAt = timestamp })
+                                        newPackageList
                             in
                             ( conn, Cmd.none )
                                 |> andThen
-                                    (loadPackagesByName
-                                        packageNames
-                                        (FetchedPackagesToUpdate seqNo timestamp packageList)
+                                    (saveAllPackages
+                                        timestamp
+                                        packageTableEntries
+                                        (SaveLoop seqNo timestamp)
+                                        (PackagesSave seqNo timestamp |> always)
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        FetchedPackagesToUpdate seqNo timestamp newPackageList loadResult ->
-            -- Save the updated package list to the table.
-            -- This updates existing version lists with new versions
-            -- OR creates a new package and version list if a package
-            -- does not already exist.
-            case loadResult of
-                Dynamo.BatchGetItems [] ->
-                    let
-                        packageTableEntries =
-                            packageListToElmPackageDyamoDBTable timestamp newPackageList
-                    in
-                    ( conn, Cmd.none )
-                        |> andThen
-                            (saveAllPackages
-                                timestamp
-                                packageTableEntries
-                                (PackagesSaved seqNo timestamp |> always)
-                            )
+        SaveLoop seqNo timestamp morePackages ->
+            ( conn, Cmd.none )
+                |> andThen
+                    (saveAllPackages
+                        timestamp
+                        morePackages
+                        (SaveLoop seqNo timestamp)
+                        (PackagesSave seqNo timestamp |> always)
+                    )
 
-                Dynamo.BatchGetItems record ->
-                    --( conn, Cmd.none )
-                    Debug.todo "Packages fetched and there are existing items."
-
-                Dynamo.BatchGetError dbErrorMsg ->
-                    error dbErrorMsg conn
-
-        PackagesSaved seqNo timestamp ->
+        PackagesSave seqNo timestamp ->
             ( conn, Cmd.none )
                 |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
 
@@ -269,31 +286,34 @@ andThen fn ( model, cmd ) =
 saveAllPackages :
     Posix
     -> List ElmPackagesDynamoDBTable
+    -> (List ElmPackagesDynamoDBTable -> Msg)
     -> (Value -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
-saveAllPackages timestamp packages responseFn conn =
+saveAllPackages timestamp packages loopFn responseFn conn =
     Dynamo.batchPut
         (fqTableName "eco-elm-packages" conn)
         elmPackagesDynamoDBTableEncoder
         packages
+        loopFn
         responseFn
         conn
 
 
-loadPackagesByName :
-    List ElmPackagesDynamoDBTableKey
-    -> (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-loadPackagesByName packageNames responseFn conn =
-    Dynamo.batchGet
-        (fqTableName "eco-elm-packages" conn)
-        elmPackagesDynamoDBTableKeyEncoder
-        packageNames
-        elmPackagesDynamoDBTableDecoder
-        responseFn
-        conn
+
+-- loadPackagesByName :
+--     List ElmPackagesDynamoDBTableKey
+--     -> (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable -> Msg)
+--     -> Conn
+--     -> ( Conn, Cmd Msg )
+-- loadPackagesByName packageNames responseFn conn =
+--     Dynamo.batchGet
+--         (fqTableName "eco-elm-packages" conn)
+--         elmPackagesDynamoDBTableKeyEncoder
+--         packageNames
+--         elmPackagesDynamoDBTableDecoder
+--         responseFn
+--         conn
 
 
 loadSeqNo : (Dynamo.GetResponse ElmSeqDynamoDBTable -> Msg) -> Conn -> ( Conn, Cmd Msg )
@@ -328,42 +348,6 @@ createdOk conn =
 error : String -> Conn -> ( Conn, Cmd Msg )
 error msg conn =
     respond ( 500, Body.text msg ) conn
-
-
-packageListToElmPackageDyamoDBTable : Posix -> List FQPackage -> List ElmPackagesDynamoDBTable
-packageListToElmPackageDyamoDBTable timestamp packages =
-    let
-        versionsByName =
-            List.foldl
-                (\{ name, version } accum ->
-                    let
-                        strName =
-                            Elm.Package.toString name
-                    in
-                    Dict.update strName
-                        (\maybeVal ->
-                            case maybeVal of
-                                Nothing ->
-                                    [ version ] |> Just
-
-                                Just versions ->
-                                    version :: versions |> Just
-                        )
-                        accum
-                )
-                Dict.empty
-                packages
-    in
-    Dict.foldl
-        (\name versions accum ->
-            { name = name
-            , versions = versions
-            , updatedAt = timestamp
-            }
-                :: accum
-        )
-        []
-        versionsByName
 
 
 
@@ -411,21 +395,23 @@ elmSeqDynamoDBTableKeyEncoder record =
 
 
 type alias ElmPackagesDynamoDBTable =
-    { name : String
-    , versions : List Elm.Version.Version
+    { name : Elm.Package.Name
+    , version : Elm.Version.Version
     , updatedAt : Posix
     }
 
 
 type alias ElmPackagesDynamoDBTableKey =
-    { name : String }
+    { name : Elm.Package.Name
+    , version : Elm.Version.Version
+    }
 
 
 elmPackagesDynamoDBTableEncoder : ElmPackagesDynamoDBTable -> Value
 elmPackagesDynamoDBTableEncoder record =
     Encode.object
-        [ ( "name", Encode.string record.name )
-        , ( "versions", Encode.list Elm.Version.encode record.versions )
+        [ ( "name", Elm.Package.encode record.name )
+        , ( "version", Elm.Version.encode record.version )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
         ]
 
@@ -433,15 +419,16 @@ elmPackagesDynamoDBTableEncoder record =
 elmPackagesDynamoDBTableDecoder : Decoder ElmPackagesDynamoDBTable
 elmPackagesDynamoDBTableDecoder =
     Decode.succeed ElmPackagesDynamoDBTable
-        |> decodeAndMap (Decode.field "name" Decode.string)
-        |> decodeAndMap (Decode.field "versions" (Decode.list Elm.Version.decoder))
+        |> decodeAndMap (Decode.field "name" Elm.Package.decoder)
+        |> decodeAndMap (Decode.field "version" Elm.Version.decoder)
         |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
 
 
 elmPackagesDynamoDBTableKeyEncoder : ElmPackagesDynamoDBTableKey -> Value
 elmPackagesDynamoDBTableKeyEncoder record =
     Encode.object
-        [ ( "name", Encode.string record.name )
+        [ ( "name", Elm.Package.encode record.name )
+        , ( "version", Elm.Version.encode record.version )
         ]
 
 

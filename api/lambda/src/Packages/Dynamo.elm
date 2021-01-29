@@ -165,14 +165,29 @@ batchPut :
     String
     -> (a -> Value)
     -> List a
+    -> (List a -> msg)
     -> (Value -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-batchPut table encoder vals responseDecoder conn =
+batchPut table encoder vals loopFn responseFn conn =
+    let
+        firstBatch =
+            List.take 25 vals
+
+        remainder =
+            List.drop 25 vals
+    in
     Serverless.interop
         dynamoBatchPutPort
-        (batchPutEncoder encoder { tableName = table, items = vals })
-        responseDecoder
+        (batchPutEncoder encoder { tableName = table, items = firstBatch })
+        (\val ->
+            case remainder of
+                [] ->
+                    responseFn val
+
+                _ ->
+                    loopFn remainder
+        )
         conn
 
 
