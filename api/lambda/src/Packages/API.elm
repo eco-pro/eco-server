@@ -246,17 +246,6 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        -- let
-        --     packageTableEntries =
-        --         packageListToElmPackageDyamoDBTable timestamp newPackageList
-        -- in
-        -- ( conn, Cmd.none )
-        --     |> andThen
-        --         (saveAllPackages
-        --             timestamp
-        --             packageTableEntries
-        --             (PackagesSaved seqNo timestamp |> always)
-        --         )
         PackagesSaved seqNo timestamp ->
             ( conn, Cmd.none )
                 |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
