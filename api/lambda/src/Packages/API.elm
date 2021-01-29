@@ -14,6 +14,7 @@ import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
 import Serverless.Conn.Request exposing (Method(..), Request, body)
+import Set
 import Task
 import Time exposing (Posix)
 import Tuple
@@ -128,7 +129,7 @@ type Msg
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | FetchedPackagesToUpdate Int Posix
+    | FetchedPackagesToUpdate Int Posix (List FQPackage) (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable)
     | PackagesSaved Int Posix
     | SeqNoSaved Int
 
@@ -172,17 +173,18 @@ update msg conn =
             case loadResult of
                 Dynamo.Item record ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince record.seq
+                    , RootSite.fetchAllPackagesSince 11450
+                        -- record.seq
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 11420)
+                        |> Task.attempt (RefreshPackages 11450)
                       --record.seq)
                     )
 
                 Dynamo.ItemNotFound ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 0
+                    , RootSite.fetchAllPackagesSince 11450
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 0)
+                        |> Task.attempt (RefreshPackages 11450)
                     )
 
                 Dynamo.Error dbErrorMsg ->
@@ -191,13 +193,43 @@ update msg conn =
         RefreshPackages from result ->
             case result of
                 Ok ( timestamp, packageList ) ->
-                    -- Save the package list to the table.
-                    let
-                        seqNo =
-                            List.length packageList + from
+                    case packageList of
+                        [] ->
+                            ( conn, Cmd.none )
+                                |> andThen createdOk
 
+                        _ ->
+                            -- Load any existing packages that are in the list of new packages.
+                            let
+                                seqNo =
+                                    List.length packageList + from
+
+                                packageNames =
+                                    List.map (\{ name } -> Elm.Package.toString name) packageList
+                                        |> Set.fromList
+                                        |> Set.toList
+                                        |> List.map (\name -> { name = name })
+                            in
+                            ( conn, Cmd.none )
+                                |> andThen
+                                    (loadPackagesByName
+                                        packageNames
+                                        (FetchedPackagesToUpdate seqNo timestamp packageList)
+                                    )
+
+                Err err ->
+                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+
+        FetchedPackagesToUpdate seqNo timestamp newPackageList loadResult ->
+            -- Save the updated package list to the table.
+            -- This updates existing version lists with new versions
+            -- OR creates a new package and version list if a package
+            -- does not already exist.
+            case loadResult of
+                Dynamo.BatchGetItems [] ->
+                    let
                         packageTableEntries =
-                            packageListToElmPackageDyamoDBTable timestamp packageList
+                            packageListToElmPackageDyamoDBTable timestamp newPackageList
                     in
                     ( conn, Cmd.none )
                         |> andThen
@@ -207,12 +239,24 @@ update msg conn =
                                 (PackagesSaved seqNo timestamp |> always)
                             )
 
-                Err err ->
-                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+                Dynamo.BatchGetItems record ->
+                    --( conn, Cmd.none )
+                    Debug.todo "Packages fetched and there are existing items."
 
-        FetchedPackagesToUpdate seqNo timestamp ->
-            ( conn, Cmd.none )
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
 
+        -- let
+        --     packageTableEntries =
+        --         packageListToElmPackageDyamoDBTable timestamp newPackageList
+        -- in
+        -- ( conn, Cmd.none )
+        --     |> andThen
+        --         (saveAllPackages
+        --             timestamp
+        --             packageTableEntries
+        --             (PackagesSaved seqNo timestamp |> always)
+        --         )
         PackagesSaved seqNo timestamp ->
             ( conn, Cmd.none )
                 |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
@@ -244,6 +288,21 @@ saveAllPackages timestamp packages responseFn conn =
         (fqTableName "eco-elm-packages" conn)
         elmPackagesDynamoDBTableEncoder
         packages
+        responseFn
+        conn
+
+
+loadPackagesByName :
+    List ElmPackagesDynamoDBTableKey
+    -> (Dynamo.BatchGetResponse ElmPackagesDynamoDBTable -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
+loadPackagesByName packageNames responseFn conn =
+    Dynamo.batchGet
+        (fqTableName "eco-elm-packages" conn)
+        elmPackagesDynamoDBTableKeyEncoder
+        packageNames
+        elmPackagesDynamoDBTableDecoder
         responseFn
         conn
 

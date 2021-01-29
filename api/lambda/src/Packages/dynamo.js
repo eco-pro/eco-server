@@ -15,14 +15,10 @@ let DocumentClient = new AWS.DynamoDB.DocumentClient();
 // --- DynamoDB Operations.
 
 let dynamoGet = (responsePort, correlationId, interopId, params) => {
-  // console.log("dynamoGet: Invoked");
-  // console.log(params);
-
   DocumentClient.get(params, (error, result) => {
     var getResponse;
 
     if (error) {
-      //console.error(error);
       getResponse = {
         type_: "Error"
       };
@@ -42,16 +38,10 @@ let dynamoGet = (responsePort, correlationId, interopId, params) => {
 }
 
 let dynamoPut = (responsePort, correlationId, interopId, params) => {
-  console.log("dynamoPut: Invoked");
-  console.log(params);
-
   DocumentClient.put(params, (error, result) => {
     if (error) {
-      console.log("dynamoPut: Error");
-      console.error(error);
       responsePort.send([correlationId, interopId, "error"]);
     } else {
-      console.log("dynamoPut: Ok")
       responsePort.send([correlationId, interopId, result]);
     }
   });
@@ -81,7 +71,6 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
 }
 
 let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
-  console.log(params);
   DocumentClient.batchWrite(params, (error, result) => {
     if (error) {
       responsePort.send([correlationId, interopId, "error"]);

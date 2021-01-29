@@ -1,5 +1,5 @@
 port module Packages.Dynamo exposing
-    ( put, get, batchPut, GetResponse(..)
+    ( put, get, batchGet, batchPut, GetResponse(..), BatchGetResponse(..)
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
     , dynamoResponsePort
     )
@@ -9,7 +9,7 @@ port module Packages.Dynamo exposing
 
 # Database Operations
 
-@docs put, get, batchGet, batchPut, GetResponse
+@docs put, get, batchGet, batchPut, GetResponse, BatchGetResponse
 
 
 # Ports
@@ -161,6 +161,21 @@ type alias BatchPut a =
     }
 
 
+batchPut :
+    String
+    -> (a -> Value)
+    -> List a
+    -> (Value -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+batchPut table encoder vals responseDecoder conn =
+    Serverless.interop
+        dynamoBatchPutPort
+        (batchPutEncoder encoder { tableName = table, items = vals })
+        responseDecoder
+        conn
+
+
 batchPutEncoder : (a -> Value) -> BatchPut a -> Value
 batchPutEncoder encoder putOp =
     let
@@ -183,16 +198,80 @@ batchPutEncoder encoder putOp =
         ]
 
 
-batchPut :
+
+-- Batch Get
+
+
+type alias BatchGet k =
+    { tableName : String
+    , keys : List k
+    }
+
+
+type BatchGetResponse a
+    = BatchGetItems (List a)
+    | BatchGetError String
+
+
+batchGet :
     String
-    -> (a -> Value)
-    -> List a
-    -> (Value -> msg)
+    -> (k -> Value)
+    -> List k
+    -> Decoder a
+    -> (BatchGetResponse a -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-batchPut table encoder vals responseDecoder conn =
+batchGet table encoder keys decoder responseFn conn =
     Serverless.interop
-        dynamoBatchPutPort
-        (batchPutEncoder encoder { tableName = table, items = Debug.log "vals to encode" vals } |> Debug.log "encoded vals")
-        responseDecoder
+        dynamoBatchGetPort
+        (batchGetEncoder encoder { tableName = table, keys = keys })
+        (buildBatchGetResponseMsg responseFn (batchGetResponseDecoder table decoder))
         conn
+
+
+batchGetEncoder : (k -> Value) -> BatchGet k -> Value
+batchGetEncoder encoder getOp =
+    Encode.object
+        [ ( "RequestItems"
+          , Encode.object
+                [ ( getOp.tableName
+                  , Encode.object
+                        [ ( "Keys"
+                          , Encode.list encoder getOp.keys
+                          )
+                        ]
+                  )
+                ]
+          )
+        ]
+
+
+batchGetResponseDecoder : String -> Decoder a -> Decoder (BatchGetResponse a)
+batchGetResponseDecoder tableName decoder =
+    Decode.field "type_" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "Item" ->
+                        Decode.at [ "item", "Responses", tableName ] (Decode.list decoder)
+                            |> Decode.map BatchGetItems
+
+                    _ ->
+                        Decode.succeed (BatchGetError "error")
+            )
+
+
+buildBatchGetResponseMsg : (BatchGetResponse a -> msg) -> Decoder (BatchGetResponse a) -> Value -> msg
+buildBatchGetResponseMsg responseFn decoder val =
+    let
+        result =
+            Decode.decodeValue decoder val
+                |> Result.map responseFn
+                |> Result.mapError (Decode.errorToString >> BatchGetError >> responseFn)
+    in
+    case result of
+        Ok ok ->
+            ok
+
+        Err err ->
+            err
