@@ -123,13 +123,13 @@ router conn =
 
 
 type Msg
-    = PassthroughAllPackages (Result Http.Error Decode.Value)
+    = DynamoMsg (Dynamo.Msg Msg)
+    | PassthroughAllPackages (Result Http.Error Decode.Value)
     | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | SavePackagesLoop Int Posix Dynamo.PutResponse (List ElmPackagesDynamoDBTable)
     | PackagesSave Int Posix Dynamo.PutResponse
     | SeqNoSave Int Dynamo.PutResponse
 
@@ -137,6 +137,9 @@ type Msg
 customLogger : Msg -> String
 customLogger msg =
     case msg of
+        DynamoMsg _ ->
+            "DynamoMsg"
+
         PassthroughAllPackages _ ->
             "PassthroughAllPackages"
 
@@ -155,9 +158,6 @@ customLogger msg =
         RefreshPackages seqNo _ ->
             "RefreshPackages " ++ String.fromInt seqNo
 
-        SavePackagesLoop seqNo _ _ _ ->
-            "SavePackagesLoop " ++ String.fromInt seqNo
-
         PackagesSave seqNo _ _ ->
             "PackagesSave " ++ String.fromInt seqNo
 
@@ -172,6 +172,13 @@ update msg conn =
             Debug.log "update" (customLogger msg)
     in
     case msg of
+        DynamoMsg innerMsg ->
+            let
+                ( nextConn, dynamoCmd ) =
+                    Dynamo.update innerMsg conn
+            in
+            ( nextConn, dynamoCmd )
+
         PassthroughAllPackages result ->
             case result of
                 Ok val ->
@@ -246,27 +253,11 @@ update msg conn =
                                     (saveAllPackages
                                         timestamp
                                         packageTableEntries
-                                        (SavePackagesLoop seqNo timestamp)
                                         (PackagesSave seqNo timestamp)
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
-
-        SavePackagesLoop seqNo timestamp res morePackages ->
-            case res of
-                Dynamo.PutOk ->
-                    ( conn, Cmd.none )
-                        |> andThen
-                            (saveAllPackages
-                                timestamp
-                                morePackages
-                                (SavePackagesLoop seqNo timestamp)
-                                (PackagesSave seqNo timestamp)
-                            )
-
-                Dynamo.PutError dbErrorMsg ->
-                    error dbErrorMsg conn
 
         PackagesSave seqNo timestamp res ->
             case res of
@@ -301,16 +292,15 @@ andThen fn ( model, cmd ) =
 saveAllPackages :
     Posix
     -> List ElmPackagesDynamoDBTable
-    -> (Dynamo.PutResponse -> List ElmPackagesDynamoDBTable -> Msg)
     -> (Dynamo.PutResponse -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
-saveAllPackages timestamp packages loopFn responseFn conn =
+saveAllPackages timestamp packages responseFn conn =
     Dynamo.batchPut
         (fqTableName "eco-elm-packages" conn)
         elmPackagesDynamoDBTableEncoder
         packages
-        loopFn
+        DynamoMsg
         responseFn
         conn
 

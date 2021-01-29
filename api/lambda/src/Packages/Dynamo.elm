@@ -1,5 +1,6 @@
 port module Packages.Dynamo exposing
-    ( put, PutResponse(..)
+    ( Msg, update
+    , put, PutResponse(..)
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
@@ -8,6 +9,11 @@ port module Packages.Dynamo exposing
     )
 
 {-| A wrapper around the AWS DynamoDB Document API.
+
+
+# TEA model.
+
+@docs Msg, Model, init, update
 
 
 # Database Operations
@@ -29,9 +35,55 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
+import Task.Extra
+
+
+type Msg msg
+    = BatchPutLoop PutResponse String (Msg msg -> msg) (PutResponse -> msg) (List Value)
+
+
+update : Msg msg -> Conn config model route msg -> ( Conn config model route msg, Cmd msg )
+update msg conn =
+    case msg of
+        BatchPutLoop response table tagger responseFn remainder ->
+            case response of
+                PutOk ->
+                    case remainder of
+                        [] ->
+                            ( conn, responseFn PutOk |> Task.Extra.message )
+
+                        _ ->
+                            let
+                                ( nextConn, loopCmd ) =
+                                    batchPutInner table
+                                        tagger
+                                        responseFn
+                                        remainder
+                                        conn
+                            in
+                            ( nextConn
+                            , loopCmd
+                            )
+
+                PutError dbErrorMsg ->
+                    ( conn, PutError dbErrorMsg |> responseFn |> Task.Extra.message )
 
 
 
+-- SavePackagesLoop seqNo timestamp res morePackages ->
+--     case res of
+--         Dynamo.PutOk ->
+--             ( conn, Cmd.none )
+--                 |> andThen
+--                     (saveAllPackages
+--                         timestamp
+--                         morePackages
+--                         (SavePackagesLoop seqNo timestamp)
+--                         (PackagesSave seqNo timestamp)
+--                     )
+--
+--         Dynamo.PutError dbErrorMsg ->
+--             error dbErrorMsg conn
 -- Port definitions.
 
 
@@ -116,20 +168,6 @@ putResponseDecoder val =
 
 
 
--- buildPutResponseMsg : (PutResponse -> msg) -> Decoder PutResponse -> Value -> msg
--- buildPutResponseMsg responseFn decoder val =
---     let
---         result =
---             Decode.decodeValue decoder val
---                 |> Result.map responseFn
---                 |> Result.mapError (Decode.errorToString >> PutError >> responseFn)
---     in
---     case result of
---         Ok ok ->
---             ok
---
---         Err err ->
---             err
 -- Get a document from DynamoDB
 
 
@@ -217,11 +255,22 @@ batchPut :
     String
     -> (a -> Value)
     -> List a
-    -> (PutResponse -> List a -> msg)
+    -> (Msg msg -> msg)
     -> (PutResponse -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-batchPut table encoder vals loopFn responseFn conn =
+batchPut table encoder vals tagger responseFn conn =
+    batchPutInner table tagger responseFn (List.map encoder vals) conn
+
+
+batchPutInner :
+    String
+    -> (Msg msg -> msg)
+    -> (PutResponse -> msg)
+    -> List Value
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+batchPutInner table tagger responseFn vals conn =
     let
         firstBatch =
             List.take 25 vals
@@ -231,26 +280,21 @@ batchPut table encoder vals loopFn responseFn conn =
     in
     Serverless.interop
         dynamoBatchPutPort
-        (batchPutEncoder encoder { tableName = table, items = firstBatch })
+        (batchPutEncoder { tableName = table, items = firstBatch })
         (\val ->
-            case remainder of
-                [] ->
-                    (putResponseDecoder >> responseFn) val
-
-                _ ->
-                    loopFn (putResponseDecoder val) remainder
+            BatchPutLoop (putResponseDecoder val) table tagger responseFn remainder |> tagger
         )
         conn
 
 
-batchPutEncoder : (a -> Value) -> BatchPut a -> Value
-batchPutEncoder encoder putOp =
+batchPutEncoder : BatchPut Value -> Value
+batchPutEncoder putOp =
     let
         encodeItem item =
             Encode.object
                 [ ( "PutRequest"
                   , Encode.object
-                        [ ( "Item", encoder item ) ]
+                        [ ( "Item", item ) ]
                   )
                 ]
     in
