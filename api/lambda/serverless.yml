@@ -62,14 +62,14 @@ resources:
       DeletionPolicy: Delete
       Properties:
         AttributeDefinitions:
-          - AttributeName: name
+          - AttributeName: package
             AttributeType: S
-          - AttributeName: version
-            AttributeType: S
+          - AttributeName: seqNo
+            AttributeType: N
         KeySchema:
-          - AttributeName: name
+          - AttributeName: package
             KeyType: HASH
-          - AttributeName: version
+          - AttributeName: seqNo
             KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 1

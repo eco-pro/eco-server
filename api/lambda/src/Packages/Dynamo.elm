@@ -13,7 +13,7 @@ port module Packages.Dynamo exposing
 
 # TEA model.
 
-@docs Msg, Model, init, update
+@docs Msg, update
 
 
 # Database Operations
@@ -36,6 +36,29 @@ import Json.Encode as Encode exposing (Value)
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
 import Task.Extra
+
+
+
+-- Port definitions.
+
+
+port dynamoResponsePort : InteropResponsePort msg
+
+
+port dynamoGetPort : InteropRequestPort Value msg
+
+
+port dynamoPutPort : InteropRequestPort Value msg
+
+
+port dynamoBatchGetPort : InteropRequestPort Value msg
+
+
+port dynamoBatchPutPort : InteropRequestPort Value msg
+
+
+
+-- Internal event handling.
 
 
 type Msg msg
@@ -67,39 +90,6 @@ update msg conn =
 
                 PutError dbErrorMsg ->
                     ( conn, PutError dbErrorMsg |> responseFn |> Task.Extra.message )
-
-
-
--- SavePackagesLoop seqNo timestamp res morePackages ->
---     case res of
---         Dynamo.PutOk ->
---             ( conn, Cmd.none )
---                 |> andThen
---                     (saveAllPackages
---                         timestamp
---                         morePackages
---                         (SavePackagesLoop seqNo timestamp)
---                         (PackagesSave seqNo timestamp)
---                     )
---
---         Dynamo.PutError dbErrorMsg ->
---             error dbErrorMsg conn
--- Port definitions.
-
-
-port dynamoResponsePort : InteropResponsePort msg
-
-
-port dynamoGetPort : InteropRequestPort Value msg
-
-
-port dynamoPutPort : InteropRequestPort Value msg
-
-
-port dynamoBatchGetPort : InteropRequestPort Value msg
-
-
-port dynamoBatchPutPort : InteropRequestPort Value msg
 
 
 
