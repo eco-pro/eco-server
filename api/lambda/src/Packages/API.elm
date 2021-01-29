@@ -129,9 +129,9 @@ type Msg
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | SaveLoop Int Posix (List ElmPackagesDynamoDBTable)
+    | SavePackagesLoop Int Posix (List ElmPackagesDynamoDBTable)
     | PackagesSave Int Posix
-    | SeqNoSaved Int
+    | SeqNoSave Int Dynamo.PutResponse
 
 
 customLogger : Msg -> String
@@ -155,14 +155,14 @@ customLogger msg =
         RefreshPackages seqNo _ ->
             "RefreshPackages " ++ String.fromInt seqNo
 
-        SaveLoop seqNo _ _ ->
-            "SaveLoop " ++ String.fromInt seqNo
+        SavePackagesLoop seqNo _ _ ->
+            "SavePackagesLoop " ++ String.fromInt seqNo
 
         PackagesSave seqNo _ ->
             "PackagesSave " ++ String.fromInt seqNo
 
-        SeqNoSaved seqNo ->
-            "SeqNoSaved " ++ String.fromInt seqNo
+        SeqNoSave seqNo _ ->
+            "SeqNoSave " ++ String.fromInt seqNo
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -206,21 +206,21 @@ update msg conn =
 
         CheckSeqNo loadResult ->
             case loadResult of
-                Dynamo.Item record ->
+                Dynamo.GetItem record ->
                     ( conn
                     , RootSite.fetchAllPackagesSince record.seq
                         |> Task.map2 Tuple.pair Time.now
                         |> Task.attempt (RefreshPackages record.seq)
                     )
 
-                Dynamo.ItemNotFound ->
+                Dynamo.GetItemNotFound ->
                     ( conn
                     , RootSite.fetchAllPackagesSince 0
                         |> Task.map2 Tuple.pair Time.now
                         |> Task.attempt (RefreshPackages 0)
                     )
 
-                Dynamo.Error dbErrorMsg ->
+                Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
         RefreshPackages from result ->
@@ -246,32 +246,37 @@ update msg conn =
                                     (saveAllPackages
                                         timestamp
                                         packageTableEntries
-                                        (SaveLoop seqNo timestamp)
+                                        (SavePackagesLoop seqNo timestamp)
                                         (PackagesSave seqNo timestamp |> always)
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        SaveLoop seqNo timestamp morePackages ->
+        SavePackagesLoop seqNo timestamp morePackages ->
             ( conn, Cmd.none )
                 |> andThen
                     (saveAllPackages
                         timestamp
                         morePackages
-                        (SaveLoop seqNo timestamp)
+                        (SavePackagesLoop seqNo timestamp)
                         (PackagesSave seqNo timestamp |> always)
                     )
 
         PackagesSave seqNo timestamp ->
             ( conn, Cmd.none )
-                |> andThen (saveSeqNo timestamp seqNo (SeqNoSaved seqNo |> always))
+                |> andThen (saveSeqNo timestamp seqNo (SeqNoSave seqNo))
 
-        SeqNoSaved seqNo ->
-            -- Trigger the processing jobs to populate them all.
-            -- Signal back to the caller that the request completed ok.
-            ( conn, Cmd.none )
-                |> andThen createdOk
+        SeqNoSave seqNo res ->
+            case res of
+                Dynamo.PutOk ->
+                    -- Trigger the processing jobs to populate them all.
+                    -- Signal back to the caller that the request completed ok.
+                    ( conn, Cmd.none )
+                        |> andThen createdOk
+
+                Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
 
 
 andThen : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
@@ -327,8 +332,8 @@ loadSeqNo responseFn conn =
         conn
 
 
-saveSeqNo : Posix -> Int -> (Value -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveSeqNo timestamp seqNo responseDecoder conn =
+saveSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveSeqNo timestamp seqNo responseFn conn =
     Dynamo.put
         (fqTableName "eco-elm-seq" conn)
         elmSeqDynamoDBTableEncoder
@@ -336,7 +341,7 @@ saveSeqNo timestamp seqNo responseDecoder conn =
         , seq = seqNo
         , updatedAt = timestamp
         }
-        responseDecoder
+        responseFn
         conn
 
 

@@ -39,11 +39,19 @@ let dynamoGet = (responsePort, correlationId, interopId, params) => {
 
 let dynamoPut = (responsePort, correlationId, interopId, params) => {
   DocumentClient.put(params, (error, result) => {
+    var putResponse;
+
     if (error) {
-      responsePort.send([correlationId, interopId, "error"]);
+      putResponse = {
+        type_: "Error"
+      };
     } else {
-      responsePort.send([correlationId, interopId, result]);
+      putResponse = {
+        type_: "Ok"
+      }
     }
+
+    responsePort.send([correlationId, interopId, putResponse]);
   });
 }
 

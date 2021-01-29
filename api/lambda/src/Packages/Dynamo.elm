@@ -1,5 +1,9 @@
 port module Packages.Dynamo exposing
-    ( put, get, batchGet, batchPut, GetResponse(..), BatchGetResponse(..)
+    ( Msg, Model, init, update
+    , put, PutResponse(..)
+    , get, GetResponse(..)
+    , batchGet, BatchGetResponse(..)
+    , batchPut
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
     , dynamoResponsePort
     )
@@ -7,9 +11,17 @@ port module Packages.Dynamo exposing
 {-| A wrapper around the AWS DynamoDB Document API.
 
 
+# TEA model.
+
+@docs Msg, Model, init, update
+
+
 # Database Operations
 
-@docs put, get, batchGet, batchPut, GetResponse, BatchGetResponse
+@docs put, PutResponse
+@docs get, GetResponse
+@docs batchGet, BatchGetResponse
+@docs batchPut
 
 
 # Ports
@@ -23,6 +35,24 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
+
+
+type Msg msg
+    = BatchPutLoop (List Value) (Value -> msg)
+
+
+type alias Model =
+    ()
+
+
+init : Model
+init =
+    ()
+
+
+update : Msg msg -> Model -> ( Model, Cmd (Msg msg) )
+update msg model =
+    ( model, Cmd.none )
 
 
 
@@ -54,6 +84,11 @@ type alias Put a =
     }
 
 
+type PutResponse
+    = PutOk
+    | PutError String
+
+
 putEncoder : (a -> Value) -> Put a -> Value
 putEncoder encoder putOp =
     Encode.object
@@ -66,15 +101,45 @@ put :
     String
     -> (a -> Value)
     -> a
-    -> (Value -> msg)
+    -> (PutResponse -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-put table encoder val responseDecoder conn =
+put table encoder val responseFn conn =
     Serverless.interop
         dynamoPutPort
         (putEncoder encoder { tableName = table, item = val })
-        responseDecoder
+        (buildPutResponseMsg responseFn putResponseDecoder)
         conn
+
+
+putResponseDecoder : Decoder PutResponse
+putResponseDecoder =
+    Decode.field "type_" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "Ok" ->
+                        Decode.succeed PutOk
+
+                    _ ->
+                        Decode.succeed (PutError "error")
+            )
+
+
+buildPutResponseMsg : (PutResponse -> msg) -> Decoder PutResponse -> Value -> msg
+buildPutResponseMsg responseFn decoder val =
+    let
+        result =
+            Decode.decodeValue decoder val
+                |> Result.map responseFn
+                |> Result.mapError (Decode.errorToString >> PutError >> responseFn)
+    in
+    case result of
+        Ok ok ->
+            ok
+
+        Err err ->
+            err
 
 
 
@@ -88,9 +153,9 @@ type alias Get k =
 
 
 type GetResponse a
-    = Item a
-    | ItemNotFound
-    | Error String
+    = GetItem a
+    | GetItemNotFound
+    | GetError String
 
 
 get :
@@ -125,13 +190,13 @@ getResponseDecoder decoder =
                 case type_ of
                     "Item" ->
                         Decode.at [ "item", "Item" ] decoder
-                            |> Decode.map Item
+                            |> Decode.map GetItem
 
                     "ItemNotFound" ->
-                        Decode.succeed ItemNotFound
+                        Decode.succeed GetItemNotFound
 
                     _ ->
-                        Decode.succeed (Error "error")
+                        Decode.succeed (GetError "error")
             )
 
 
@@ -141,7 +206,7 @@ buildGetResponseMsg responseFn decoder val =
         result =
             Decode.decodeValue decoder val
                 |> Result.map responseFn
-                |> Result.mapError (Decode.errorToString >> Error >> responseFn)
+                |> Result.mapError (Decode.errorToString >> GetError >> responseFn)
     in
     case result of
         Ok ok ->
