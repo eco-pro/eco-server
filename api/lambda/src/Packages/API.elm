@@ -1,5 +1,7 @@
 port module Packages.API exposing (main)
 
+import Dict exposing (Dict)
+import Elm.Package
 import Elm.Version
 import Http
 import Json.Decode as Decode exposing (Decoder)
@@ -172,7 +174,8 @@ update msg conn =
                     ( conn
                     , RootSite.fetchAllPackagesSince record.seq
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages record.seq)
+                        |> Task.attempt (RefreshPackages 11420)
+                      --record.seq)
                     )
 
                 Dynamo.ItemNotFound ->
@@ -192,9 +195,17 @@ update msg conn =
                     let
                         seqNo =
                             List.length packageList + from
+
+                        packageTableEntries =
+                            packageListToElmPackageDyamoDBTable timestamp packageList
                     in
                     ( conn, Cmd.none )
-                        |> andThen (saveAllPackages timestamp [] (PackagesSaved seqNo timestamp |> always))
+                        |> andThen
+                            (saveAllPackages
+                                timestamp
+                                packageTableEntries
+                                (PackagesSaved seqNo timestamp |> always)
+                            )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
@@ -229,7 +240,12 @@ saveAllPackages :
     -> Conn
     -> ( Conn, Cmd Msg )
 saveAllPackages timestamp packages responseFn conn =
-    ( conn, Cmd.none )
+    Dynamo.batchPut
+        (fqTableName "eco-elm-packages" conn)
+        elmPackagesDynamoDBTableEncoder
+        packages
+        responseFn
+        conn
 
 
 loadSeqNo : (Dynamo.GetResponse ElmSeqDynamoDBTable -> Msg) -> Conn -> ( Conn, Cmd Msg )
@@ -264,6 +280,42 @@ createdOk conn =
 error : String -> Conn -> ( Conn, Cmd Msg )
 error msg conn =
     respond ( 500, Body.text msg ) conn
+
+
+packageListToElmPackageDyamoDBTable : Posix -> List FQPackage -> List ElmPackagesDynamoDBTable
+packageListToElmPackageDyamoDBTable timestamp packages =
+    let
+        versionsByName =
+            List.foldl
+                (\{ name, version } accum ->
+                    let
+                        strName =
+                            Elm.Package.toString name
+                    in
+                    Dict.update strName
+                        (\maybeVal ->
+                            case maybeVal of
+                                Nothing ->
+                                    [ version ] |> Just
+
+                                Just versions ->
+                                    version :: versions |> Just
+                        )
+                        accum
+                )
+                Dict.empty
+                packages
+    in
+    Dict.foldl
+        (\name versions accum ->
+            { name = name
+            , versions = versions
+            , updatedAt = timestamp
+            }
+                :: accum
+        )
+        []
+        versionsByName
 
 
 

@@ -2,10 +2,14 @@ const rc = require('rc');
 const elmServerless = require('@the-sett/serverless-elm-bridge');
 //const elmServerless = require('/home/rupert/sc/github/the-sett/elm-serverless/src-bridge/index.js');
 
-const { DynamoDBPorts } = require('./dynamo.js');
+const {
+  DynamoDBPorts
+} = require('./dynamo.js');
 
 // Import the elm app
-const { Elm } = require('./API.elm');
+const {
+  Elm
+} = require('./API.elm');
 
 // Use AWS Lambda environment variables to override these values.
 const config = rc('eco-server', {
@@ -25,4 +29,9 @@ module.exports.handler = elmServerless.httpApi({
 
 // Subscribe to DynamoDB Ports.
 const dynamoPorts = new DynamoDBPorts();
-dynamoPorts.subscribe(app, "dynamoGetPort", "dynamoPutPort", "dynamoResponsePort");
+dynamoPorts.subscribe(app,
+  "dynamoGetPort",
+  "dynamoPutPort",
+  "dynamoBatchGetPort",
+  "dynamoBatchPutPort",
+  "dynamoResponsePort");

@@ -81,6 +81,7 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
 }
 
 let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
+  console.log(params);
   DocumentClient.batchWrite(params, (error, result) => {
     if (error) {
       responsePort.send([correlationId, interopId, "error"]);
@@ -91,16 +92,10 @@ let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
 }
 
 let dynamoUpdate = (responsePort, correlationId, interopId, params) => {
-  console.log("dynamoUpdate: Invoked");
-  console.log(params);
-
   DocumentClient.get(params, (error, result) => {
     if (error) {
-      console.log("dynamoUpdate: Error");
-      console.error(error);
       responsePort.send([correlationId, interopId, "error"]);
     } else {
-      console.log("dynamoUpdate: Ok")
       responsePort.send([correlationId, interopId, result]);
     }
   });

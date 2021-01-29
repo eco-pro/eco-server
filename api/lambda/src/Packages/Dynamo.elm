@@ -1,5 +1,5 @@
 port module Packages.Dynamo exposing
-    ( put, get, GetResponse(..)
+    ( put, get, batchPut, GetResponse(..)
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
     , dynamoResponsePort
     )
@@ -9,7 +9,7 @@ port module Packages.Dynamo exposing
 
 # Database Operations
 
-@docs put, get, GetResponse
+@docs put, get, batchGet, batchPut, GetResponse
 
 
 # Ports
@@ -38,10 +38,10 @@ port dynamoGetPort : InteropRequestPort Value msg
 port dynamoPutPort : InteropRequestPort Value msg
 
 
-port dynamoBatchPutPort : InteropRequestPort Value msg
-
-
 port dynamoBatchGetPort : InteropRequestPort Value msg
+
+
+port dynamoBatchPutPort : InteropRequestPort Value msg
 
 
 
@@ -193,22 +193,6 @@ batchPut :
 batchPut table encoder vals responseDecoder conn =
     Serverless.interop
         dynamoBatchPutPort
-        (batchPutEncoder encoder { tableName = table, items = vals })
+        (batchPutEncoder encoder { tableName = table, items = Debug.log "vals to encode" vals } |> Debug.log "encoded vals")
         responseDecoder
         conn
-
-
-
--- Batch get
--- var params = {
---     RequestItems: {
---         'dev-eco-elm-seq': {
---             Keys: [
---                 {
---                     label: 'latest'
---                 }
---
---             ]
---         }
---     }
--- };
