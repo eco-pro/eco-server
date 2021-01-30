@@ -366,6 +366,16 @@ type KeyExpression
     = KeyExpression
 
 
+type Attribute
+    = StringAttr String
+    | NumberAttr Int
+
+
+type Key
+    = Partition ( String, Attribute )
+    | PartitionAndSort ( String, Attribute ) ( String, Attribute )
+
+
 keyExpression : KeyExpression
 keyExpression =
     KeyExpression
