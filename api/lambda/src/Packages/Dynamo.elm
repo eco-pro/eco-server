@@ -35,6 +35,7 @@ port module Packages.Dynamo exposing
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Result.Extra
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
 import Task.Extra
@@ -109,14 +110,6 @@ type PutResponse
     | PutError String
 
 
-putEncoder : (a -> Value) -> Put a -> Value
-putEncoder encoder putOp =
-    Encode.object
-        [ ( "TableName", Encode.string putOp.tableName )
-        , ( "Item", encoder putOp.item )
-        ]
-
-
 put :
     String
     -> (a -> Value)
@@ -130,6 +123,14 @@ put table encoder val responseFn conn =
         (putEncoder encoder { tableName = table, item = val })
         (putResponseDecoder >> responseFn)
         conn
+
+
+putEncoder : (a -> Value) -> Put a -> Value
+putEncoder encoder putOp =
+    Encode.object
+        [ ( "TableName", Encode.string putOp.tableName )
+        , ( "Item", encoder putOp.item )
+        ]
 
 
 putResponseDecoder : Value -> PutResponse
@@ -146,17 +147,10 @@ putResponseDecoder val =
                             _ ->
                                 Decode.succeed (PutError "error")
                     )
-
-        result =
-            Decode.decodeValue decoder val
-                |> Result.mapError (Decode.errorToString >> PutError)
     in
-    case result of
-        Ok ok ->
-            ok
-
-        Err err ->
-            err
+    Decode.decodeValue decoder val
+        |> Result.mapError (Decode.errorToString >> PutError)
+        |> Result.Extra.merge
 
 
 
@@ -187,7 +181,7 @@ get table encoder key decoder responseFn conn =
     Serverless.interop
         dynamoGetPort
         (getEncoder encoder { tableName = table, key = key })
-        (buildGetResponseMsg responseFn (getResponseDecoder decoder))
+        (getResponseDecoder decoder >> responseFn)
         conn
 
 
@@ -199,38 +193,28 @@ getEncoder encoder getOp =
         ]
 
 
-getResponseDecoder : Decoder a -> Decoder (GetResponse a)
-getResponseDecoder decoder =
-    Decode.field "type_" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Item" ->
-                        Decode.at [ "item", "Item" ] decoder
-                            |> Decode.map GetItem
-
-                    "ItemNotFound" ->
-                        Decode.succeed GetItemNotFound
-
-                    _ ->
-                        Decode.succeed (GetError "error")
-            )
-
-
-buildGetResponseMsg : (GetResponse a -> msg) -> Decoder (GetResponse a) -> Value -> msg
-buildGetResponseMsg responseFn decoder val =
+getResponseDecoder : Decoder a -> Value -> GetResponse a
+getResponseDecoder itemDecoder val =
     let
-        result =
-            Decode.decodeValue decoder val
-                |> Result.map responseFn
-                |> Result.mapError (Decode.errorToString >> GetError >> responseFn)
-    in
-    case result of
-        Ok ok ->
-            ok
+        decoder =
+            Decode.field "type_" Decode.string
+                |> Decode.andThen
+                    (\type_ ->
+                        case type_ of
+                            "Item" ->
+                                Decode.at [ "item", "Item" ] itemDecoder
+                                    |> Decode.map GetItem
 
-        Err err ->
-            err
+                            "ItemNotFound" ->
+                                Decode.succeed GetItemNotFound
+
+                            _ ->
+                                Decode.succeed (GetError "error")
+                    )
+    in
+    Decode.decodeValue decoder val
+        |> Result.mapError (Decode.errorToString >> GetError)
+        |> Result.Extra.merge
 
 
 
@@ -328,7 +312,7 @@ batchGet table encoder keys decoder responseFn conn =
     Serverless.interop
         dynamoBatchGetPort
         (batchGetEncoder encoder { tableName = table, keys = keys })
-        (buildBatchGetResponseMsg responseFn (batchGetResponseDecoder table decoder))
+        (batchGetResponseDecoder table decoder >> responseFn)
         conn
 
 
@@ -349,35 +333,25 @@ batchGetEncoder encoder getOp =
         ]
 
 
-batchGetResponseDecoder : String -> Decoder a -> Decoder (BatchGetResponse a)
-batchGetResponseDecoder tableName decoder =
-    Decode.field "type_" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Item" ->
-                        Decode.at [ "item", "Responses", tableName ] (Decode.list decoder)
-                            |> Decode.map BatchGetItems
-
-                    _ ->
-                        Decode.succeed (BatchGetError "error")
-            )
-
-
-buildBatchGetResponseMsg : (BatchGetResponse a -> msg) -> Decoder (BatchGetResponse a) -> Value -> msg
-buildBatchGetResponseMsg responseFn decoder val =
+batchGetResponseDecoder : String -> Decoder a -> Value -> BatchGetResponse a
+batchGetResponseDecoder tableName itemDecoder val =
     let
-        result =
-            Decode.decodeValue decoder val
-                |> Result.map responseFn
-                |> Result.mapError (Decode.errorToString >> BatchGetError >> responseFn)
-    in
-    case result of
-        Ok ok ->
-            ok
+        decoder =
+            Decode.field "type_" Decode.string
+                |> Decode.andThen
+                    (\type_ ->
+                        case type_ of
+                            "Item" ->
+                                Decode.at [ "item", "Responses", tableName ] (Decode.list itemDecoder)
+                                    |> Decode.map BatchGetItems
 
-        Err err ->
-            err
+                            _ ->
+                                Decode.succeed (BatchGetError "error")
+                    )
+    in
+    Decode.decodeValue decoder val
+        |> Result.mapError (Decode.errorToString >> BatchGetError)
+        |> Result.Extra.merge
 
 
 
