@@ -291,24 +291,6 @@ andThen fn ( model, cmd ) =
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
 
 
-loadPackagesSince :
-    Int
-    -> (Dynamo.QueryResponse PackagesTable.Record -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-loadPackagesSince seqNo responseFn conn =
-    let
-        keyExpression =
-            ()
-    in
-    Dynamo.query
-        (fqTableName "eco-elm-packages" conn)
-        Dynamo.keyExpression
-        PackagesTable.decoder
-        responseFn
-        conn
-
-
 saveAllPackages :
     Posix
     -> List PackagesTable.Record
@@ -343,8 +325,27 @@ saveSeqNo timestamp seqNo responseFn conn =
         SeqTable.encode
         { label = "latest"
         , seq = seqNo
+        , fqPackage = Nothing
         , updatedAt = timestamp
         }
+        responseFn
+        conn
+
+
+loadPackagesSince :
+    Int
+    -> (Dynamo.QueryResponse PackagesTable.Record -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
+loadPackagesSince seqNo responseFn conn =
+    let
+        keyExpression =
+            ()
+    in
+    Dynamo.query
+        (fqTableName "eco-elm-packages" conn)
+        Dynamo.keyExpression
+        PackagesTable.decoder
         responseFn
         conn
 
