@@ -13,6 +13,7 @@
             "elm/project-metadata-utils": "1.0.1",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
+            "elm-community/result-extra": "2.4.0",
             "the-sett/elm-serverless": "4.0.0",
             "the-sett/elm-update-helper": "1.4.1"
         },
