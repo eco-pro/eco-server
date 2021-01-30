@@ -9,6 +9,8 @@ import Json.Encode as Encode exposing (Value)
 import Packages.Dynamo as Dynamo
 import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
+import Packages.Table.Packages as PackagesTable
+import Packages.Table.Seq as SeqTable
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
@@ -128,7 +130,7 @@ type Msg
     | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | CheckSeqNo (Dynamo.GetResponse ElmSeqDynamoDBTable)
+    | CheckSeqNo (Dynamo.GetResponse SeqTable.Record)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave Int Posix Dynamo.PutResponse
     | SeqNoSave Int Dynamo.PutResponse
@@ -291,7 +293,7 @@ andThen fn ( model, cmd ) =
 
 loadPackagesSince :
     Int
-    -> (Dynamo.QueryResponse ElmPackagesDynamoDBTable -> Msg)
+    -> (Dynamo.QueryResponse PackagesTable.Record -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
 loadPackagesSince seqNo responseFn conn =
@@ -302,34 +304,34 @@ loadPackagesSince seqNo responseFn conn =
     Dynamo.query
         (fqTableName "eco-elm-packages" conn)
         Dynamo.keyExpression
-        elmPackagesDynamoDBTableDecoder
+        PackagesTable.decoder
         responseFn
         conn
 
 
 saveAllPackages :
     Posix
-    -> List ElmPackagesDynamoDBTable
+    -> List PackagesTable.Record
     -> (Dynamo.PutResponse -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
 saveAllPackages timestamp packages responseFn conn =
     Dynamo.batchPut
         (fqTableName "eco-elm-packages" conn)
-        elmPackagesDynamoDBTableEncoder
+        PackagesTable.encode
         packages
         DynamoMsg
         responseFn
         conn
 
 
-loadSeqNo : (Dynamo.GetResponse ElmSeqDynamoDBTable -> Msg) -> Conn -> ( Conn, Cmd Msg )
+loadSeqNo : (Dynamo.GetResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
 loadSeqNo responseFn conn =
     Dynamo.get
         (fqTableName "eco-elm-seq" conn)
-        elmSeqDynamoDBTableKeyEncoder
+        SeqTable.encodeKey
         { label = "latest" }
-        elmSeqDynamoDBTableDecoder
+        SeqTable.decoder
         responseFn
         conn
 
@@ -338,7 +340,7 @@ saveSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd M
 saveSeqNo timestamp seqNo responseFn conn =
     Dynamo.put
         (fqTableName "eco-elm-seq" conn)
-        elmSeqDynamoDBTableEncoder
+        SeqTable.encode
         { label = "latest"
         , seq = seqNo
         , updatedAt = timestamp
@@ -364,85 +366,3 @@ error msg conn =
 fqTableName : String -> Conn -> String
 fqTableName name conn =
     (Conn.config conn).dynamoDbNamespace ++ "-" ++ name
-
-
-type alias ElmSeqDynamoDBTable =
-    { label : String
-    , seq : Int
-    , updatedAt : Posix
-    }
-
-
-type alias ElmSeqDynamoDBTableKey =
-    { label : String }
-
-
-elmSeqDynamoDBTableEncoder : ElmSeqDynamoDBTable -> Value
-elmSeqDynamoDBTableEncoder record =
-    Encode.object
-        [ ( "label", Encode.string record.label )
-        , ( "seq", Encode.int record.seq )
-        , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
-        ]
-
-
-elmSeqDynamoDBTableDecoder : Decoder ElmSeqDynamoDBTable
-elmSeqDynamoDBTableDecoder =
-    Decode.succeed ElmSeqDynamoDBTable
-        |> decodeAndMap (Decode.field "label" Decode.string)
-        |> decodeAndMap (Decode.field "seq" Decode.int)
-        |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
-
-
-elmSeqDynamoDBTableKeyEncoder : ElmSeqDynamoDBTableKey -> Value
-elmSeqDynamoDBTableKeyEncoder record =
-    Encode.object
-        [ ( "label", Encode.string record.label )
-        ]
-
-
-type alias ElmPackagesDynamoDBTable =
-    { name : Elm.Package.Name
-    , version : Elm.Version.Version
-    , updatedAt : Posix
-    }
-
-
-type alias ElmPackagesDynamoDBTableKey =
-    { name : Elm.Package.Name
-    , version : Elm.Version.Version
-    }
-
-
-elmPackagesDynamoDBTableEncoder : ElmPackagesDynamoDBTable -> Value
-elmPackagesDynamoDBTableEncoder record =
-    Encode.object
-        [ ( "name", Elm.Package.encode record.name )
-        , ( "version", Elm.Version.encode record.version )
-        , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
-        ]
-
-
-elmPackagesDynamoDBTableDecoder : Decoder ElmPackagesDynamoDBTable
-elmPackagesDynamoDBTableDecoder =
-    Decode.succeed ElmPackagesDynamoDBTable
-        |> decodeAndMap (Decode.field "name" Elm.Package.decoder)
-        |> decodeAndMap (Decode.field "version" Elm.Version.decoder)
-        |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
-
-
-elmPackagesDynamoDBTableKeyEncoder : ElmPackagesDynamoDBTableKey -> Value
-elmPackagesDynamoDBTableKeyEncoder record =
-    Encode.object
-        [ ( "name", Elm.Package.encode record.name )
-        , ( "version", Elm.Version.encode record.version )
-        ]
-
-
-
--- Helpers
-
-
-decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b
-decodeAndMap =
-    Decode.map2 (|>)
