@@ -49,9 +49,13 @@ resources:
         AttributeDefinitions:
           - AttributeName: label
             AttributeType: S
+          - AttributeName: seq
+            AttributeType: N
         KeySchema:
           - AttributeName: label
             KeyType: HASH
+          - AttributeName: seq
+            KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1

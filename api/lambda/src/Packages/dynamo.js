@@ -20,7 +20,8 @@ let dynamoGet = (responsePort, correlationId, interopId, params) => {
 
     if (error) {
       getResponse = {
-        type_: "Error"
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
       };
     } else if (Object.entries(result).length === 0) {
       getResponse = {
@@ -43,7 +44,8 @@ let dynamoPut = (responsePort, correlationId, interopId, params) => {
 
     if (error) {
       putResponse = {
-        type_: "Error"
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
       };
     } else {
       putResponse = {
@@ -61,7 +63,8 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
 
     if (error) {
       getResponse = {
-        type_: "Error"
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
       };
     } else if (Object.entries(result).length === 0) {
       getResponse = {
@@ -84,7 +87,8 @@ let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
 
     if (error) {
       putResponse = {
-        type_: "Error"
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
       };
     } else {
       putResponse = {

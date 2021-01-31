@@ -15,7 +15,9 @@ type alias Record =
 
 
 type alias Key =
-    { label : String }
+    { label : String
+    , seq : Int
+    }
 
 
 encode : Record -> Value
@@ -48,6 +50,7 @@ encodeKey : Key -> Value
 encodeKey record =
     Encode.object
         [ ( "label", Encode.string record.label )
+        , ( "seq", Encode.int record.seq )
         ]
 
 

@@ -145,7 +145,8 @@ putResponseDecoder val =
                                 Decode.succeed PutOk
 
                             _ ->
-                                Decode.succeed (PutError "error")
+                                Decode.field "errorMsg" Decode.string
+                                    |> Decode.map PutError
                     )
     in
     Decode.decodeValue decoder val
@@ -209,7 +210,8 @@ getResponseDecoder itemDecoder val =
                                 Decode.succeed GetItemNotFound
 
                             _ ->
-                                Decode.succeed (GetError "error")
+                                Decode.field "errorMsg" Decode.string
+                                    |> Decode.map GetError
                     )
     in
     Decode.decodeValue decoder val
@@ -346,7 +348,8 @@ batchGetResponseDecoder tableName itemDecoder val =
                                     |> Decode.map BatchGetItems
 
                             _ ->
-                                Decode.succeed (BatchGetError "error")
+                                Decode.field "errorMsg" Decode.string
+                                    |> Decode.map BatchGetError
                     )
     in
     Decode.decodeValue decoder val

@@ -246,9 +246,15 @@ update msg conn =
                                     List.length newPackageList + from
 
                                 packageTableEntries =
-                                    List.map
-                                        (\{ name, version } -> { name = name, version = version, updatedAt = timestamp })
-                                        newPackageList
+                                    List.reverse newPackageList
+                                        |> List.indexedMap
+                                            (\idx fqPackage ->
+                                                { label = "new"
+                                                , seq = from + idx
+                                                , fqPackage = Just fqPackage
+                                                , updatedAt = timestamp
+                                                }
+                                            )
                             in
                             ( conn, Cmd.none )
                                 |> andThen
@@ -293,14 +299,14 @@ andThen fn ( model, cmd ) =
 
 saveAllPackages :
     Posix
-    -> List PackagesTable.Record
+    -> List SeqTable.Record
     -> (Dynamo.PutResponse -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
 saveAllPackages timestamp packages responseFn conn =
     Dynamo.batchPut
-        (fqTableName "eco-elm-packages" conn)
-        PackagesTable.encode
+        (fqTableName "eco-elm-seq" conn)
+        SeqTable.encode
         packages
         DynamoMsg
         responseFn
@@ -312,7 +318,9 @@ loadSeqNo responseFn conn =
     Dynamo.get
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
-        { label = "latest" }
+        { label = "latest"
+        , seq = 0
+        }
         SeqTable.decoder
         responseFn
         conn
