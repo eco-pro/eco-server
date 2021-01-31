@@ -250,7 +250,7 @@ update msg conn =
                                         |> List.indexedMap
                                             (\idx fqPackage ->
                                                 { label = "new"
-                                                , seq = from + idx
+                                                , seq = from + idx + 1
                                                 , fqPackage = Just fqPackage
                                                 , updatedAt = timestamp
                                                 }
