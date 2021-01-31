@@ -130,7 +130,7 @@ type Msg
     | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | CheckSeqNo (Dynamo.GetResponse SeqTable.Record)
+    | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave Int Posix Dynamo.PutResponse
     | SeqNoSave Int Dynamo.PutResponse
@@ -215,21 +215,21 @@ update msg conn =
 
         CheckSeqNo loadResult ->
             case loadResult of
-                Dynamo.GetItem record ->
-                    ( conn
-                    , RootSite.fetchAllPackagesSince record.seq
-                        |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages record.seq)
-                    )
-
-                Dynamo.GetItemNotFound ->
+                Dynamo.BatchGetItems [] ->
                     ( conn
                     , RootSite.fetchAllPackagesSince 0
                         |> Task.map2 Tuple.pair Time.now
                         |> Task.attempt (RefreshPackages 0)
                     )
 
-                Dynamo.GetError dbErrorMsg ->
+                Dynamo.BatchGetItems (record :: _) ->
+                    ( conn
+                    , RootSite.fetchAllPackagesSince record.seq
+                        |> Task.map2 Tuple.pair Time.now
+                        |> Task.attempt (RefreshPackages record.seq)
+                    )
+
+                Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
         RefreshPackages from result ->
@@ -313,7 +313,7 @@ saveAllPackages timestamp packages responseFn conn =
         conn
 
 
-loadSeqNo : (Dynamo.GetResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
+loadSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
 loadSeqNo responseFn conn =
     -- Need to query like this:
     --
@@ -324,12 +324,15 @@ loadSeqNo responseFn conn =
     --   ScanIndexForward: false,
     --   Limit: 1
     -- };
-    Dynamo.get
+    let
+        query =
+            Dynamo.hashKeyEquals "label" "latest"
+                |> Dynamo.orderResults Dynamo.Reverse
+                |> Dynamo.limitResults 1
+    in
+    Dynamo.query
         (fqTableName "eco-elm-seq" conn)
-        SeqTable.encodeKey
-        { label = "latest"
-        , seq = 0
-        }
+        query
         SeqTable.decoder
         responseFn
         conn
@@ -355,16 +358,13 @@ loadPackagesSince :
     -> Conn
     -> ( Conn, Cmd Msg )
 loadPackagesSince seqNo responseFn conn =
-    let
-        keyExpression =
-            ()
-    in
-    Dynamo.query
-        (fqTableName "eco-elm-packages" conn)
-        Dynamo.keyExpression
-        PackagesTable.decoder
-        responseFn
-        conn
+    -- Dynamo.query
+    --     (fqTableName "eco-elm-packages" conn)
+    --     Dynamo.keyExpression
+    --     PackagesTable.decoder
+    --     responseFn
+    --     conn
+    Debug.todo "loadPackagesSince"
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )

@@ -4,7 +4,7 @@ port module Packages.Dynamo exposing
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
-    , query, keyExpression, QueryResponse
+    , Query, QueryResponse, Order(..), query, hashKeyEquals, limitResults, orderResults
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
     , dynamoResponsePort
     )
@@ -23,7 +23,8 @@ port module Packages.Dynamo exposing
 @docs get, GetResponse
 @docs batchGet, BatchGetResponse
 @docs batchPut
-@docs query, keyExpression, QueryResponse
+
+@docs Query, QueryResponse, Order, query, hashKeyEquals, limitResults, orderResults
 
 
 # Ports
@@ -365,31 +366,65 @@ type alias QueryResponse a =
     BatchGetResponse a
 
 
-type KeyExpression
-    = KeyExpression
-
-
 type Attribute
     = StringAttr String
     | NumberAttr Int
 
 
-type Key
-    = Partition ( String, Attribute )
-    | PartitionAndSort ( String, Attribute ) ( String, Attribute )
+type KeyExpression
+    = KeyExpression
 
 
-keyExpression : KeyExpression
-keyExpression =
-    KeyExpression
+type KeyCondition
+    = --| PartitionAndSort ( String, Attribute ) KeyExpression
+      Partition ( String, Attribute )
+
+
+type Order
+    = Forward
+    | Reverse
+
+
+type alias Query =
+    { keyCondition : KeyCondition
+    , order : Order
+    , limit : Maybe Int
+    }
+
+
+hashKeyEquals : String -> String -> Query
+hashKeyEquals key val =
+    { keyCondition = Partition ( key, StringAttr val )
+    , order = Forward
+    , limit = Nothing
+    }
+
+
+orderResults : Order -> Query -> Query
+orderResults ord q =
+    { q | order = ord }
+
+
+limitResults : Int -> Query -> Query
+limitResults limit q =
+    { q | limit = Just limit }
 
 
 query :
     String
-    -> KeyExpression
+    -> Query
     -> Decoder a
     -> (QueryResponse a -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
 query =
     Debug.todo "query"
+
+
+
+-- var params = {
+--   TableName: 'dev-eco-elm-seq',
+--   KeyConditionExpression: 'label = :latest',
+--   ExpressionAttributeValues: { ':latest': 'latest' },
+--   ScanIndexForward: false,
+--   Limit: 1
