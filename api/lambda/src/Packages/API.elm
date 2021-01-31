@@ -315,6 +315,15 @@ saveAllPackages timestamp packages responseFn conn =
 
 loadSeqNo : (Dynamo.GetResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
 loadSeqNo responseFn conn =
+    -- Need to query like this:
+    --
+    -- var params = {
+    --   TableName: 'dev-eco-elm-seq',
+    --   KeyConditionExpression: 'label = :latest',
+    --   ExpressionAttributeValues: { ':latest': 'latest' },
+    --   ScanIndexForward: false,
+    --   Limit: 1
+    -- };
     Dynamo.get
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
