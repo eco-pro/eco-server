@@ -317,7 +317,7 @@ loadSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd
 loadSeqNo responseFn conn =
     let
         query =
-            Dynamo.hashKeyEquals "label" "latest"
+            Dynamo.partitionKeyEquals "label" "latest"
                 |> Dynamo.orderResults Dynamo.Reverse
                 |> Dynamo.limitResults 1
     in
@@ -351,7 +351,7 @@ loadPackagesSince :
 loadPackagesSince seqNo responseFn conn =
     let
         query =
-            Dynamo.hashKeyEquals "label" "new"
+            Dynamo.partitionKeyEquals "label" "new"
                 |> Dynamo.orderResults Dynamo.Reverse
                 |> Dynamo.limitResults 1
     in

@@ -4,7 +4,7 @@ port module Packages.Dynamo exposing
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
-    , Query, QueryResponse, Order(..), query, hashKeyEquals, limitResults, orderResults
+    , Query, QueryResponse, Order(..), query, partitionKeyEquals, limitResults, orderResults
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
     , dynamoResponsePort
     )
@@ -24,7 +24,7 @@ port module Packages.Dynamo exposing
 @docs batchGet, BatchGetResponse
 @docs batchPut
 
-@docs Query, QueryResponse, Order, query, hashKeyEquals, limitResults, orderResults
+@docs Query, QueryResponse, Order, query, partitionKeyEquals, limitResults, orderResults
 
 
 # Ports
@@ -380,8 +380,21 @@ type KeyExpression
 
 
 type KeyCondition
-    = --| PartitionAndSort ( String, Attribute ) KeyExpression
-      Partition ( String, Attribute )
+    = Equals ( String, Attribute )
+    | LessThan ( String, Attribute )
+    | LessThenOrEqual ( String, Attribute )
+    | GreaterThan ( String, Attribute )
+    | GreaterThanOrEqual ( String, Attribute )
+    | Between ( String, Attribute, Attribute )
+
+
+
+-- a = b — true if the attribute a is equal to the value b
+-- a < b — true if a is less than b
+-- a <= b — true if a is less than or equal to b
+-- a > b — true if a is greater than b
+-- a >= b — true if a is greater than or equal to b
+-- a BETWEEN b AND c — true if a is greater than or equal to b, and less than or equal to c.
 
 
 type Order
@@ -390,15 +403,17 @@ type Order
 
 
 type alias Query =
-    { keyCondition : KeyCondition
+    { partitionKey : ( String, Attribute )
+    , rangeKeyCondition : Maybe KeyCondition
     , order : Order
     , limit : Maybe Int
     }
 
 
-hashKeyEquals : String -> String -> Query
-hashKeyEquals key val =
-    { keyCondition = Partition ( key, StringAttr val )
+partitionKeyEquals : String -> String -> Query
+partitionKeyEquals key val =
+    { partitionKey = ( key, StringAttr val )
+    , rangeKeyCondition = Nothing
     , order = Forward
     , limit = Nothing
     }
@@ -432,7 +447,7 @@ query table q decoder responseFn conn =
 queryEncoder : String -> Query -> Value
 queryEncoder table q =
     let
-        keyCond (Partition ( field, attr )) =
+        keyCond ( field, attr ) =
             case attr of
                 StringAttr val ->
                     ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.string val ) ] )
@@ -441,7 +456,7 @@ queryEncoder table q =
                     ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.int val ) ] )
 
         ( keyExpressions, attrVals ) =
-            keyCond q.keyCondition
+            keyCond q.partitionKey
 
         keyExpressionsString =
             List.map
