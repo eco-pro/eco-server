@@ -34,4 +34,5 @@ dynamoPorts.subscribe(app,
   "dynamoPutPort",
   "dynamoBatchGetPort",
   "dynamoBatchPutPort",
+  "dynamoQueryPort",
   "dynamoResponsePort");

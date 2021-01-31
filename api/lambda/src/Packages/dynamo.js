@@ -68,7 +68,8 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
       };
     } else if (Object.entries(result).length === 0) {
       getResponse = {
-        type_: "ItemNotFound"
+        type_: "Item",
+        item: []
       }
     } else {
       getResponse = {
@@ -100,15 +101,31 @@ let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
   });
 }
 
-let dynamoUpdate = (responsePort, correlationId, interopId, params) => {
-  DocumentClient.get(params, (error, result) => {
+let dynamoQuery = (responsePort, correlationId, interopId, params) => {
+  DocumentClient.query(params, (error, result) => {
+    var getResponse;
+    
     if (error) {
-      responsePort.send([correlationId, interopId, "error"]);
+      getResponse = {
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
+      };
+    } else if (Object.entries(result).length === 0) {
+      getResponse = {
+        type_: "Item",
+        item: []
+      }
     } else {
-      responsePort.send([correlationId, interopId, result]);
+      getResponse = {
+        type_: "Item",
+        item: result
+      }
     }
+
+    responsePort.send([correlationId, interopId, getResponse]);
   });
 }
+
 
 // --- Provide a function for wiring all the ports up by Elm port name.
 
@@ -121,6 +138,7 @@ DynamoDBPorts.prototype.subscribe =
     dynamoPutPortName,
     dynamoBatchGetPortName,
     dynamoBatchPutPortName,
+    dynamoQueryPortName,
     dynamoResponsePortName
 
   ) {
@@ -136,6 +154,9 @@ DynamoDBPorts.prototype.subscribe =
 
     if (!dynamoBatchPutPortName)
       dynamoBatchPutPortName = "dynamoBatchPutPort";
+
+    if (!dynamoQueryPortName)
+      dynamoQueryPortName = "dynamoQueryPort";
 
     if (!dynamoResponsePortName)
       dynamoResponsePortName = "dynamoResponsePort";
@@ -173,6 +194,14 @@ DynamoDBPorts.prototype.subscribe =
     if (app.ports[dynamoBatchPutPortName]) {
       app.ports[dynamoBatchPutPortName].subscribe(args => {
         dynamoBatchPut(dynamoResponsePort, args[0], args[1], args[2]);
+      });
+    } else {
+      console.warn("The " + dynamoPutPortName + " port is not connected.");
+    }
+
+    if (app.ports[dynamoQueryPortName]) {
+      app.ports[dynamoQueryPortName].subscribe(args => {
+        dynamoQuery(dynamoResponsePort, args[0], args[1], args[2]);
       });
     } else {
       console.warn("The " + dynamoPutPortName + " port is not connected.");

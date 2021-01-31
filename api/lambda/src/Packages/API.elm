@@ -315,15 +315,6 @@ saveAllPackages timestamp packages responseFn conn =
 
 loadSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
 loadSeqNo responseFn conn =
-    -- Need to query like this:
-    --
-    -- var params = {
-    --   TableName: 'dev-eco-elm-seq',
-    --   KeyConditionExpression: 'label = :latest',
-    --   ExpressionAttributeValues: { ':latest': 'latest' },
-    --   ScanIndexForward: false,
-    --   Limit: 1
-    -- };
     let
         query =
             Dynamo.hashKeyEquals "label" "latest"
@@ -354,17 +345,22 @@ saveSeqNo timestamp seqNo responseFn conn =
 
 loadPackagesSince :
     Int
-    -> (Dynamo.QueryResponse PackagesTable.Record -> Msg)
+    -> (Dynamo.QueryResponse SeqTable.Record -> Msg)
     -> Conn
     -> ( Conn, Cmd Msg )
 loadPackagesSince seqNo responseFn conn =
-    -- Dynamo.query
-    --     (fqTableName "eco-elm-packages" conn)
-    --     Dynamo.keyExpression
-    --     PackagesTable.decoder
-    --     responseFn
-    --     conn
-    Debug.todo "loadPackagesSince"
+    let
+        query =
+            Dynamo.hashKeyEquals "label" "new"
+                |> Dynamo.orderResults Dynamo.Reverse
+                |> Dynamo.limitResults 1
+    in
+    Dynamo.query
+        (fqTableName "eco-elm-seq" conn)
+        query
+        SeqTable.decoder
+        responseFn
+        conn
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )

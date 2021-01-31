@@ -5,7 +5,7 @@ port module Packages.Dynamo exposing
     , batchGet, BatchGetResponse(..)
     , batchPut
     , Query, QueryResponse, Order(..), query, hashKeyEquals, limitResults, orderResults
-    , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
+    , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
     , dynamoResponsePort
     )
 
@@ -29,13 +29,14 @@ port module Packages.Dynamo exposing
 
 # Ports
 
-@docs dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort
+@docs dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
 @docs @dopcs dynamoResponsePort
 
 -}
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Maybe.Extra
 import Result.Extra
 import Serverless exposing (InteropRequestPort, InteropResponsePort)
 import Serverless.Conn exposing (Conn)
@@ -59,6 +60,9 @@ port dynamoBatchGetPort : InteropRequestPort Value msg
 
 
 port dynamoBatchPutPort : InteropRequestPort Value msg
+
+
+port dynamoQueryPort : InteropRequestPort Value msg
 
 
 
@@ -417,14 +421,69 @@ query :
     -> (QueryResponse a -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-query =
-    Debug.todo "query"
+query table q decoder responseFn conn =
+    Serverless.interop
+        dynamoQueryPort
+        (queryEncoder table q)
+        (queryResponseDecoder decoder >> responseFn)
+        conn
 
 
+queryEncoder : String -> Query -> Value
+queryEncoder table q =
+    let
+        keyCond (Partition ( field, attr )) =
+            case attr of
+                StringAttr val ->
+                    ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.string val ) ] )
 
--- var params = {
---   TableName: 'dev-eco-elm-seq',
---   KeyConditionExpression: 'label = :latest',
---   ExpressionAttributeValues: { ':latest': 'latest' },
---   ScanIndexForward: false,
---   Limit: 1
+                NumberAttr val ->
+                    ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.int val ) ] )
+
+        ( keyExpressions, attrVals ) =
+            keyCond q.keyCondition
+
+        keyExpressionsString =
+            List.map
+                (\( k, a ) -> k ++ " = " ++ a)
+                keyExpressions
+                |> String.join " AND "
+
+        encodedAttrVals =
+            Encode.object attrVals
+    in
+    [ ( "TableName", Encode.string table ) |> Just
+    , ( "KeyConditionExpression", Encode.string keyExpressionsString ) |> Just
+    , ( "ExpressionAttributeValues", encodedAttrVals ) |> Just
+    , case q.order of
+        Forward ->
+            ( "ScanIndexForward", Encode.bool True ) |> Just
+
+        Reverse ->
+            ( "ScanIndexForward", Encode.bool False ) |> Just
+    , Maybe.map (\limit -> ( "Limit", Encode.int limit )) q.limit
+    ]
+        |> Maybe.Extra.values
+        |> Encode.object
+
+
+queryResponseDecoder : Decoder a -> Value -> BatchGetResponse a
+queryResponseDecoder itemDecoder val =
+    let
+        decoder =
+            Decode.field "type_" Decode.string
+                |> Decode.andThen
+                    (\type_ ->
+                        case type_ of
+                            "Item" ->
+                                Decode.at [ "item", "Items" ] (Decode.list itemDecoder)
+                                    |> Decode.map BatchGetItems
+
+                            _ ->
+                                Decode.field "errorMsg" Decode.string
+                                    |> Decode.map BatchGetError
+                    )
+    in
+    Decode.decodeValue decoder val
+        |> Result.mapError (Decode.errorToString >> BatchGetError)
+        |> Result.Extra.merge
