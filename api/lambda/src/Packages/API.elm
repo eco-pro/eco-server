@@ -6,6 +6,7 @@ import Elm.Version
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Maybe.Extra
 import Packages.Dynamo as Dynamo
 import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
@@ -111,7 +112,8 @@ router conn =
 
         -- The enhanced API
         ( GET, AllPackagesSince since ) ->
-            ( conn, RootSite.fetchAllPackagesSince since |> Task.attempt PassthroughAllPackagesSince )
+            ( conn, Cmd.none )
+                |> andThen (loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, Refresh ) ->
             loadSeqNo CheckSeqNo conn
@@ -134,6 +136,7 @@ type Msg
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave Int Posix Dynamo.PutResponse
     | SeqNoSave Int Dynamo.PutResponse
+    | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
 
 
 customLogger : Msg -> String
@@ -165,6 +168,9 @@ customLogger msg =
 
         SeqNoSave seqNo _ ->
             "SeqNoSave " ++ String.fromInt seqNo
+
+        PackagesSinceLoaded _ ->
+            "PackagesSinceLoaded"
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -285,6 +291,22 @@ update msg conn =
                         |> andThen createdOk
 
                 Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        PackagesSinceLoaded loadResult ->
+            case Debug.log "loadResult" loadResult of
+                Dynamo.BatchGetItems records ->
+                    let
+                        jsonRecords =
+                            records
+                                |> List.map .fqPackage
+                                |> List.reverse
+                                |> Maybe.Extra.values
+                                |> Encode.list (FQPackage.toString >> Encode.string)
+                    in
+                    respond ( 200, Body.json jsonRecords ) conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
 
