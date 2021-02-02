@@ -5,6 +5,9 @@ port module Packages.Dynamo exposing
     , batchGet, BatchGetResponse(..)
     , batchPut
     , Query, QueryResponse, Order(..), query, partitionKeyEquals, limitResults, orderResults
+    , rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
+    , rangeKeyGreaterThanOrEqual, rangeKeyBetween
+    , int, string
     , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
     , dynamoResponsePort
     )
@@ -17,14 +20,20 @@ port module Packages.Dynamo exposing
 @docs Msg, update
 
 
-# Database Operations
+# Simple Database Operations
 
 @docs put, PutResponse
 @docs get, GetResponse
 @docs batchGet, BatchGetResponse
 @docs batchPut
 
+
+# Database Queries
+
 @docs Query, QueryResponse, Order, query, partitionKeyEquals, limitResults, orderResults
+@docs rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
+@docs rangeKeyGreaterThanOrEqual, rangeKeyBetween
+@docs int, string
 
 
 # Ports
@@ -380,21 +389,12 @@ type KeyExpression
 
 
 type KeyCondition
-    = Equals ( String, Attribute )
-    | LessThan ( String, Attribute )
-    | LessThenOrEqual ( String, Attribute )
-    | GreaterThan ( String, Attribute )
-    | GreaterThanOrEqual ( String, Attribute )
-    | Between ( String, Attribute, Attribute )
-
-
-
--- a = b — true if the attribute a is equal to the value b
--- a < b — true if a is less than b
--- a <= b — true if a is less than or equal to b
--- a > b — true if a is greater than b
--- a >= b — true if a is greater than or equal to b
--- a BETWEEN b AND c — true if a is greater than or equal to b, and less than or equal to c.
+    = Equals String Attribute
+    | LessThan String Attribute
+    | LessThenOrEqual String Attribute
+    | GreaterThan String Attribute
+    | GreaterThanOrEqual String Attribute
+    | Between String Attribute Attribute
 
 
 type Order
@@ -403,20 +403,131 @@ type Order
 
 
 type alias Query =
-    { partitionKey : ( String, Attribute )
+    { partitionKeyName : String
+    , partitionKeyValue : Attribute
     , rangeKeyCondition : Maybe KeyCondition
     , order : Order
     , limit : Maybe Int
     }
 
 
+{-| From AWS DynamoDB docs, the encoding of key conditions as strings looks like:
+
+    a = b — true if the attribute a is equal to the value b
+    a < b — true if a is less than b
+    a <= b — true if a is less than or equal to b
+    a > b — true if a is greater than b
+    a >= b — true if a is greater than or equal to b
+    a BETWEEN b AND c — true if a is greater than or equal to b, and less than or equal to c.
+
+Values must be encoded as attribute with names like ":someAttr", and these get encoded
+into the "ExpressionAttributeValues" part of the query JSON. An indexing scheme is used
+to ensure all the needed attributes get unique names.
+
+-}
+keyConditionAsStringAndAttrs : List KeyCondition -> ( String, List ( String, Value ) )
+keyConditionAsStringAndAttrs keyConditions =
+    let
+        encodeKeyConditions index keyCondition =
+            let
+                attrName =
+                    ":attr" ++ String.fromInt index
+            in
+            case keyCondition of
+                Equals field attr ->
+                    ( field ++ " = " ++ attrName, [ ( attrName, encodeAttr attr ) ] )
+
+                LessThan field attr ->
+                    ( field ++ " < " ++ attrName, [ ( attrName, encodeAttr attr ) ] )
+
+                LessThenOrEqual field attr ->
+                    ( field ++ " <= " ++ attrName, [ ( attrName, encodeAttr attr ) ] )
+
+                GreaterThan field attr ->
+                    ( field ++ " > " ++ attrName, [ ( attrName, encodeAttr attr ) ] )
+
+                GreaterThanOrEqual field attr ->
+                    ( field ++ " >= " ++ attrName, [ ( attrName, encodeAttr attr ) ] )
+
+                Between field lowAttr highAttr ->
+                    let
+                        lowAttrName =
+                            ":lowattr" ++ String.fromInt index
+
+                        highAttrName =
+                            ":highattr" ++ String.fromInt index
+                    in
+                    ( field ++ " BETWEEN " ++ lowAttrName ++ " AND " ++ highAttrName
+                    , [ ( lowAttrName, encodeAttr lowAttr )
+                      , ( highAttrName, encodeAttr highAttr )
+                      ]
+                    )
+    in
+    keyConditions
+        |> List.indexedMap encodeKeyConditions
+        |> List.unzip
+        |> Tuple.mapFirst (String.join " AND ")
+        |> Tuple.mapSecond List.concat
+
+
+int : Int -> Attribute
+int val =
+    NumberAttr val
+
+
+string : String -> Attribute
+string val =
+    StringAttr val
+
+
+encodeAttr : Attribute -> Value
+encodeAttr attr =
+    case attr of
+        StringAttr val ->
+            Encode.string val
+
+        NumberAttr val ->
+            Encode.int val
+
+
 partitionKeyEquals : String -> String -> Query
 partitionKeyEquals key val =
-    { partitionKey = ( key, StringAttr val )
+    { partitionKeyName = key
+    , partitionKeyValue = StringAttr val
     , rangeKeyCondition = Nothing
     , order = Forward
     , limit = Nothing
     }
+
+
+rangeKeyEquals : String -> Attribute -> Query -> Query
+rangeKeyEquals keyName attr q =
+    { q | rangeKeyCondition = Equals keyName attr |> Just }
+
+
+rangeKeyLessThan : String -> Attribute -> Query -> Query
+rangeKeyLessThan keyName attr q =
+    { q | rangeKeyCondition = LessThan keyName attr |> Just }
+
+
+rangeKeyLessThanOrEqual : String -> Attribute -> Query -> Query
+rangeKeyLessThanOrEqual keyName attr q =
+    { q | rangeKeyCondition = LessThenOrEqual keyName attr |> Just }
+
+
+rangeKeyGreaterThan : String -> Attribute -> Query -> Query
+rangeKeyGreaterThan keyName attr q =
+    { q | rangeKeyCondition = GreaterThan keyName attr |> Just }
+
+
+rangeKeyGreaterThanOrEqual : String -> Attribute -> Query -> Query
+rangeKeyGreaterThanOrEqual keyName attr q =
+    { q | rangeKeyCondition = GreaterThanOrEqual keyName attr |> Just }
+
+
+rangeKeyBetween : String -> Attribute -> Attribute -> Query -> Query
+rangeKeyBetween keyName lowAttr highAttr q =
+    { q | rangeKeyCondition = Between keyName lowAttr highAttr |> Just }
 
 
 orderResults : Order -> Query -> Query
@@ -447,22 +558,12 @@ query table q decoder responseFn conn =
 queryEncoder : String -> Query -> Value
 queryEncoder table q =
     let
-        keyCond ( field, attr ) =
-            case attr of
-                StringAttr val ->
-                    ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.string val ) ] )
-
-                NumberAttr val ->
-                    ( [ ( field, ":attr0" ) ], [ ( ":attr0", Encode.int val ) ] )
-
-        ( keyExpressions, attrVals ) =
-            keyCond q.partitionKey
-
-        keyExpressionsString =
-            List.map
-                (\( k, a ) -> k ++ " = " ++ a)
-                keyExpressions
-                |> String.join " AND "
+        ( keyExpressionsString, attrVals ) =
+            [ Equals q.partitionKeyName q.partitionKeyValue |> Just
+            , q.rangeKeyCondition
+            ]
+                |> Maybe.Extra.values
+                |> keyConditionAsStringAndAttrs
 
         encodedAttrVals =
             Encode.object attrVals

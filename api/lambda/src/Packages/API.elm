@@ -352,8 +352,7 @@ loadPackagesSince seqNo responseFn conn =
     let
         query =
             Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.orderResults Dynamo.Reverse
-                |> Dynamo.limitResults 1
+                |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seqNo)
     in
     Dynamo.query
         (fqTableName "eco-elm-seq" conn)
