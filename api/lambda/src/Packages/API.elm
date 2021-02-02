@@ -294,7 +294,7 @@ update msg conn =
                     error dbErrorMsg conn
 
         PackagesSinceLoaded loadResult ->
-            case Debug.log "loadResult" loadResult of
+            case loadResult of
                 Dynamo.BatchGetItems records ->
                     let
                         jsonRecords =
