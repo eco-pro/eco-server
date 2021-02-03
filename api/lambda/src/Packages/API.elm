@@ -99,7 +99,8 @@ router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         -- The original package site API
         ( GET, AllPackages ) ->
-            ( conn, RootSite.fetchAllPackages PassthroughAllPackages )
+            ( conn, Cmd.none )
+                |> andThen (loadPackagesSince 0 AllPackagesLoaded)
 
         ( POST, AllPackagesSince since ) ->
             ( conn, Cmd.none )
@@ -129,7 +130,6 @@ router conn =
 
 type Msg
     = DynamoMsg (Dynamo.Msg Msg)
-    | PassthroughAllPackages (Result Http.Error Decode.Value)
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
@@ -137,6 +137,7 @@ type Msg
     | PackagesSave Int Posix Dynamo.PutResponse
     | SeqNoSave Int Dynamo.PutResponse
     | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
+    | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
 
 
 customLogger : Msg -> String
@@ -144,9 +145,6 @@ customLogger msg =
     case msg of
         DynamoMsg _ ->
             "DynamoMsg"
-
-        PassthroughAllPackages _ ->
-            "PassthroughAllPackages"
 
         PassthroughElmJson _ ->
             "PassthroughElmJson"
@@ -169,6 +167,9 @@ customLogger msg =
         PackagesSinceLoaded _ ->
             "PackagesSinceLoaded"
 
+        AllPackagesLoaded _ ->
+            "AllPackagesLoaded"
+
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
 update msg conn =
@@ -183,14 +184,6 @@ update msg conn =
                     Dynamo.update innerMsg conn
             in
             ( nextConn, dynamoCmd )
-
-        PassthroughAllPackages result ->
-            case result of
-                Ok val ->
-                    respond ( 200, Body.json val ) conn
-
-                Err err ->
-                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
         PassthroughElmJson result ->
             case result of
@@ -292,6 +285,42 @@ update msg conn =
                                 |> List.reverse
                                 |> Maybe.Extra.values
                                 |> Encode.list (FQPackage.toString >> Encode.string)
+                    in
+                    respond ( 200, Body.json jsonRecords ) conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        AllPackagesLoaded loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems records ->
+                    let
+                        jsonRecords =
+                            records
+                                |> List.map .fqPackage
+                                |> List.reverse
+                                |> Maybe.Extra.values
+                                |> groupByName
+                                |> Encode.dict identity (Encode.list Elm.Version.encode)
+
+                        groupByName fqPackages =
+                            List.foldl
+                                (\{ name, version } accum ->
+                                    Dict.update (Elm.Package.toString name)
+                                        (\key ->
+                                            case key of
+                                                Nothing ->
+                                                    [ version ] |> Just
+
+                                                Just versions ->
+                                                    version :: versions |> Just
+                                        )
+                                        accum
+                                )
+                                Dict.empty
+                                fqPackages
+
+                        --|> Encode.list (FQPackage.toString >> Encode.string)
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
