@@ -102,7 +102,8 @@ router conn =
             ( conn, RootSite.fetchAllPackages PassthroughAllPackages )
 
         ( POST, AllPackagesSince since ) ->
-            ( conn, RootSite.fetchAllPackagesSince since |> Task.attempt PassthroughAllPackagesSince )
+            ( conn, Cmd.none )
+                |> andThen (loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, ElmJson author name version ) ->
             ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
@@ -129,7 +130,6 @@ router conn =
 type Msg
     = DynamoMsg (Dynamo.Msg Msg)
     | PassthroughAllPackages (Result Http.Error Decode.Value)
-    | PassthroughAllPackagesSince (Result Http.Error (List FQPackage))
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
@@ -147,9 +147,6 @@ customLogger msg =
 
         PassthroughAllPackages _ ->
             "PassthroughAllPackages"
-
-        PassthroughAllPackagesSince _ ->
-            "PassthroughAllPackagesSince"
 
         PassthroughElmJson _ ->
             "PassthroughElmJson"
@@ -193,14 +190,6 @@ update msg conn =
                     respond ( 200, Body.json val ) conn
 
                 Err err ->
-                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
-
-        PassthroughAllPackagesSince result ->
-            case result of
-                Ok val ->
-                    respond ( 200, Body.json (Encode.list FQPackage.encode val) ) conn
-
-                Err _ ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
         PassthroughElmJson result ->
