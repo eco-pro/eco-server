@@ -6,11 +6,20 @@ import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Time exposing (Posix)
 
 
+type Status
+    = Latest
+    | NewFromRootSite
+        { fqPackage : FQPackage
+        }
+    | OutdatedPackage
+    | ValidElmJson
+    | Ready
+
+
 type alias Record =
-    { label : String
-    , seq : Int
-    , fqPackage : Maybe FQPackage
+    { seq : Int
     , updatedAt : Posix
+    , status : Status
     }
 
 
@@ -23,27 +32,62 @@ type alias Key =
 encode : Record -> Value
 encode record =
     Encode.object
-        [ ( "label", Encode.string record.label )
+        [ ( "label", statusToLabel record.status |> Encode.string )
         , ( "seq", Encode.int record.seq )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
-        , ( "fqPackage"
-          , case record.fqPackage of
-                Nothing ->
-                    Encode.null
-
-                Just val ->
-                    FQPackage.encode val
-          )
+        , ( "status", encodeStatus record.status )
         ]
+
+
+statusToLabel : Status -> String
+statusToLabel status =
+    case status of
+        Latest ->
+            "latest"
+
+        NewFromRootSite _ ->
+            "new"
+
+        OutdatedPackage ->
+            "outdated"
+
+        ValidElmJson ->
+            "valid-elm-json"
+
+        Ready ->
+            "ready"
+
+
+encodeStatus : Status -> Value
+encodeStatus status =
+    case status of
+        Latest ->
+            Encode.object []
+
+        NewFromRootSite { fqPackage } ->
+            Encode.object [ ( "fqPackage", FQPackage.encode fqPackage ) ]
+
+        OutdatedPackage ->
+            Encode.object []
+
+        ValidElmJson ->
+            Encode.object []
+
+        Ready ->
+            Encode.object []
 
 
 decoder : Decoder Record
 decoder =
     Decode.succeed Record
-        |> decodeAndMap (Decode.field "label" Decode.string)
         |> decodeAndMap (Decode.field "seq" Decode.int)
-        |> decodeAndMap (Decode.field "fqPackage" (Decode.maybe FQPackage.decoder))
         |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
+        |> decodeAndMap (Decode.field "status" statusDecoder)
+
+
+statusDecoder : Decoder Status
+statusDecoder =
+    Debug.todo "statusDecoder"
 
 
 encodeKey : Key -> Value

@@ -355,7 +355,7 @@ update msg conn =
                     respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetItems (record :: _) ->
-                    respond ( 200, Body.text ("Job " ++ Debug.toString record) ) conn
+                    respond ( 200, Body.json (SeqTable.encode record) ) conn
 
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
