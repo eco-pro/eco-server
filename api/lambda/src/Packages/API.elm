@@ -79,6 +79,7 @@ type Route
     | ElmJson String String String
     | EndpointJson String String String
     | Refresh
+    | NextJob
     | PackageElmJson
     | PackageLocation
 
@@ -103,6 +104,7 @@ routeParser =
                 </> s "endpoint.json"
             )
         , map Refresh (s "refresh")
+        , map NextJob (s "nextjob")
         ]
         |> Url.Parser.parse
 
@@ -131,7 +133,10 @@ router conn =
                 |> andThen (loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, Refresh ) ->
-            loadSeqNo CheckSeqNo conn
+            getLatestSeqNo CheckSeqNo conn
+
+        ( GET, NextJob ) ->
+            getLowestNewSeqNo ProvideJobDetails conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -151,6 +156,7 @@ type Msg
     | SeqNoSave Int Dynamo.PutResponse
     | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
+    | ProvideJobDetails (Dynamo.QueryResponse SeqTable.Record)
 
 
 customLogger : Msg -> String
@@ -182,6 +188,9 @@ customLogger msg =
 
         AllPackagesLoaded _ ->
             "AllPackagesLoaded"
+
+        ProvideJobDetails _ ->
+            "ProvideJobDetails"
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -272,7 +281,7 @@ update msg conn =
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (saveSeqNo timestamp seqNo (SeqNoSave seqNo))
+                        |> andThen (saveLatestSeqNo timestamp seqNo (SeqNoSave seqNo))
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -340,6 +349,17 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
+        ProvideJobDetails loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems [] ->
+                    respond ( 404, Body.text "No job." ) conn
+
+                Dynamo.BatchGetItems (record :: _) ->
+                    respond ( 200, Body.text ("Job " ++ Debug.toString record) ) conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
 
 andThen : (model -> ( model, Cmd msg )) -> ( model, Cmd msg ) -> ( model, Cmd msg )
 andThen fn ( model, cmd ) =
@@ -366,8 +386,8 @@ saveAllPackages timestamp packages responseFn conn =
         conn
 
 
-loadSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-loadSeqNo responseFn conn =
+getLatestSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
+getLatestSeqNo responseFn conn =
     let
         query =
             Dynamo.partitionKeyEquals "label" "latest"
@@ -382,8 +402,8 @@ loadSeqNo responseFn conn =
         conn
 
 
-saveSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveSeqNo timestamp seqNo responseFn conn =
+saveLatestSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveLatestSeqNo timestamp seqNo responseFn conn =
     Dynamo.put
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encode
@@ -392,6 +412,21 @@ saveSeqNo timestamp seqNo responseFn conn =
         , fqPackage = Nothing
         , updatedAt = timestamp
         }
+        responseFn
+        conn
+
+
+getLowestNewSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
+getLowestNewSeqNo responseFn conn =
+    let
+        query =
+            Dynamo.partitionKeyEquals "label" "new"
+                |> Dynamo.limitResults 1
+    in
+    Dynamo.query
+        (fqTableName "eco-elm-seq" conn)
+        query
+        SeqTable.decoder
         responseFn
         conn
 
