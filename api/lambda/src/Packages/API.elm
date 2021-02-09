@@ -55,7 +55,6 @@ main =
 
 
 
---, Decode.map DynamoOk Decode.value
 -- Configuration
 
 
@@ -80,6 +79,8 @@ type Route
     | ElmJson String String String
     | EndpointJson String String String
     | Refresh
+    | PackageElmJson
+    | PackageLocation
 
 
 routeParser : Url.Url -> Maybe Route
@@ -87,8 +88,20 @@ routeParser =
     oneOf
         [ map AllPackages (s "all-packages")
         , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
-        , map ElmJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "elm.json")
-        , map EndpointJson (s "packages" </> Url.Parser.string </> Url.Parser.string </> Url.Parser.string </> s "endpoint.json")
+        , map ElmJson
+            (s "packages"
+                </> Url.Parser.string
+                </> Url.Parser.string
+                </> Url.Parser.string
+                </> s "elm.json"
+            )
+        , map EndpointJson
+            (s "packages"
+                </> Url.Parser.string
+                </> Url.Parser.string
+                </> Url.Parser.string
+                </> s "endpoint.json"
+            )
         , map Refresh (s "refresh")
         ]
         |> Url.Parser.parse
