@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
+import requests as req
 
 print("=== Eco-Server Elm Package Build Script ===")
 
 # Check on the package server what job to do next, if any.
 print("What job?")
+
+resp = req.get("http://localhost:3000/nextjob")
+status = resp.status_code
+job = resp.json()
+
+print(status)
+print(job)
+print(job['zipUrl'])
+
+# https://github.com/elm/core/zipball/1.0.0/
 
 # Download the package .zip from GitHub, and unpack it.
 print("Downloading from GitHub...")
