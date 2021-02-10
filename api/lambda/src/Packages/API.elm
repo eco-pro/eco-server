@@ -300,9 +300,17 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems records ->
                     let
+                        readyPackage status =
+                            case status of
+                                SeqTable.Ready { fqPackage } ->
+                                    Just fqPackage
+
+                                _ ->
+                                    Nothing
+
                         jsonRecords =
                             records
-                                |> List.map .fqPackage
+                                |> List.map (.status >> readyPackage)
                                 |> List.reverse
                                 |> Maybe.Extra.values
                                 |> Encode.list (FQPackage.toString >> Encode.string)
@@ -316,9 +324,17 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems records ->
                     let
+                        readyPackage status =
+                            case status of
+                                SeqTable.Ready { fqPackage } ->
+                                    Just fqPackage
+
+                                _ ->
+                                    Nothing
+
                         jsonRecords =
                             records
-                                |> List.map .fqPackage
+                                |> List.map (.status >> readyPackage)
                                 |> List.reverse
                                 |> Maybe.Extra.values
                                 |> groupByName
@@ -340,8 +356,6 @@ update msg conn =
                                 )
                                 Dict.empty
                                 fqPackages
-
-                        --|> Encode.list (FQPackage.toString >> Encode.string)
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
