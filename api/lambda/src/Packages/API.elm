@@ -259,10 +259,9 @@ update msg conn =
                                     List.reverse newPackageList
                                         |> List.indexedMap
                                             (\idx fqPackage ->
-                                                { label = "new"
-                                                , seq = from + idx + 1
-                                                , fqPackage = Just fqPackage
+                                                { seq = from + idx + 1
                                                 , updatedAt = timestamp
+                                                , status = SeqTable.NewFromRootSite { fqPackage = fqPackage }
                                                 }
                                             )
                             in
@@ -407,10 +406,9 @@ saveLatestSeqNo timestamp seqNo responseFn conn =
     Dynamo.put
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encode
-        { label = "latest"
-        , seq = seqNo
-        , fqPackage = Nothing
+        { seq = seqNo
         , updatedAt = timestamp
+        , status = SeqTable.Latest
         }
         responseFn
         conn

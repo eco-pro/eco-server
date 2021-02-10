@@ -13,7 +13,26 @@ type Status
         }
     | OutdatedPackage
     | ValidElmJson
+        { fqPackage : FQPackage
+
+        --, elmJson : Value
+        }
     | Ready
+        { fqPackage : FQPackage
+
+        --, elmJson : Value
+        --, packageUrl : Url
+        }
+    | Error
+
+
+type Label
+    = LabelLatest
+    | LabelNewFromRootSite
+    | LabelOutdatedPackage
+    | LabelValidElmJson
+    | LabelReady
+    | LabelError
 
 
 type alias Record =
@@ -24,7 +43,7 @@ type alias Record =
 
 
 type alias Key =
-    { label : String
+    { label : Label
     , seq : Int
     }
 
@@ -32,49 +51,82 @@ type alias Key =
 encode : Record -> Value
 encode record =
     Encode.object
-        [ ( "label", statusToLabel record.status |> Encode.string )
-        , ( "seq", Encode.int record.seq )
-        , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
-        , ( "status", encodeStatus record.status )
-        ]
+        ([ ( "label"
+           , statusToLabel record.status
+                |> labelToString
+                |> Encode.string
+           )
+         , ( "seq", Encode.int record.seq )
+         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
+         ]
+            ++ encodeStatus record.status
+        )
 
 
-statusToLabel : Status -> String
+statusToLabel : Status -> Label
 statusToLabel status =
     case status of
         Latest ->
-            "latest"
+            LabelLatest
 
         NewFromRootSite _ ->
-            "new"
+            LabelNewFromRootSite
 
         OutdatedPackage ->
+            LabelOutdatedPackage
+
+        ValidElmJson _ ->
+            LabelValidElmJson
+
+        Ready _ ->
+            LabelReady
+
+        Error ->
+            LabelError
+
+
+labelToString : Label -> String
+labelToString label =
+    case label of
+        LabelLatest ->
+            "latest"
+
+        LabelNewFromRootSite ->
+            "new"
+
+        LabelOutdatedPackage ->
             "outdated"
 
-        ValidElmJson ->
+        LabelValidElmJson ->
             "valid-elm-json"
 
-        Ready ->
+        LabelReady ->
             "ready"
 
+        LabelError ->
+            "error"
 
-encodeStatus : Status -> Value
+
+encodeStatus : Status -> List ( String, Value )
 encodeStatus status =
     case status of
         Latest ->
-            Encode.object []
+            []
 
         NewFromRootSite { fqPackage } ->
-            Encode.object [ ( "fqPackage", FQPackage.encode fqPackage ) ]
+            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
 
         OutdatedPackage ->
-            Encode.object []
+            []
 
-        ValidElmJson ->
-            Encode.object []
+        ValidElmJson { fqPackage } ->
+            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
 
-        Ready ->
-            Encode.object []
+        Ready { fqPackage } ->
+            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
+
+        Error ->
+            []
 
 
 decoder : Decoder Record
@@ -82,18 +134,42 @@ decoder =
     Decode.succeed Record
         |> decodeAndMap (Decode.field "seq" Decode.int)
         |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
-        |> decodeAndMap (Decode.field "status" statusDecoder)
+        |> decodeAndMap statusDecoder
 
 
 statusDecoder : Decoder Status
 statusDecoder =
-    Debug.todo "statusDecoder"
+    Decode.field "label" Decode.string
+        |> Decode.andThen
+            (\label ->
+                case label of
+                    "latest" ->
+                        Decode.succeed Latest
+
+                    "new" ->
+                        Decode.field "fqPackage" FQPackage.decoder
+                            |> Decode.map (\fqp -> NewFromRootSite { fqPackage = fqp })
+
+                    "outdated" ->
+                        Decode.succeed OutdatedPackage
+
+                    "valid-elm-json" ->
+                        Decode.field "fqPackage" FQPackage.decoder
+                            |> Decode.map (\fqp -> ValidElmJson { fqPackage = fqp })
+
+                    "ready" ->
+                        Decode.field "fqPackage" FQPackage.decoder
+                            |> Decode.map (\fqp -> Ready { fqPackage = fqp })
+
+                    _ ->
+                        Decode.succeed Error
+            )
 
 
 encodeKey : Key -> Value
 encodeKey record =
     Encode.object
-        [ ( "label", Encode.string record.label )
+        [ ( "label", labelToString record.label |> Encode.string )
         , ( "seq", Encode.int record.seq )
         ]
 
