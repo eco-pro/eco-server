@@ -22,6 +22,7 @@ import Task
 import Time exposing (Posix)
 import Tuple
 import Url
+import Url.Builder
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
 
@@ -368,7 +369,31 @@ update msg conn =
                     respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetItems (record :: _) ->
-                    respond ( 200, Body.json (SeqTable.encode record) ) conn
+                    case record.status of
+                        SeqTable.NewFromRootSite { fqPackage } ->
+                            let
+                                job =
+                                    { fqPackage = fqPackage
+                                    , zipUrl =
+                                        Url.Builder.crossOrigin
+                                            "https://github.com"
+                                            [ Elm.Package.toString fqPackage.name
+                                            , "zipball"
+                                            , Elm.Version.toString fqPackage.version
+                                            ]
+                                            []
+                                    }
+
+                                jobEncoder val =
+                                    Encode.object
+                                        [ ( "fqPackage", FQPackage.encode val.fqPackage )
+                                        , ( "zipUrl", Encode.string val.zipUrl )
+                                        ]
+                            in
+                            respond ( 200, Body.json (jobEncoder job) ) conn
+
+                        _ ->
+                            respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
