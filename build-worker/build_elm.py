@@ -8,8 +8,12 @@ print("What job?")
 
 resp = req.get("http://localhost:3000/nextjob")
 status = resp.status_code
-job = resp.json()
 
+if status != 200:
+  print("No job.")
+  quit()
+
+job = resp.json()
 print(status)
 print(job)
 print(job['zipUrl'])

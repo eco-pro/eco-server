@@ -22,6 +22,7 @@ import Task
 import Time exposing (Posix)
 import Tuple
 import Url
+import Url.Builder
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
 
@@ -259,10 +260,9 @@ update msg conn =
                                     List.reverse newPackageList
                                         |> List.indexedMap
                                             (\idx fqPackage ->
-                                                { label = "new"
-                                                , seq = from + idx + 1
-                                                , fqPackage = Just fqPackage
+                                                { seq = from + idx + 1
                                                 , updatedAt = timestamp
+                                                , status = SeqTable.NewFromRootSite { fqPackage = fqPackage }
                                                 }
                                             )
                             in
@@ -301,9 +301,17 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems records ->
                     let
+                        readyPackage status =
+                            case status of
+                                SeqTable.Ready { fqPackage } ->
+                                    Just fqPackage
+
+                                _ ->
+                                    Nothing
+
                         jsonRecords =
                             records
-                                |> List.map .fqPackage
+                                |> List.map (.status >> readyPackage)
                                 |> List.reverse
                                 |> Maybe.Extra.values
                                 |> Encode.list (FQPackage.toString >> Encode.string)
@@ -317,9 +325,17 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems records ->
                     let
+                        readyPackage status =
+                            case status of
+                                SeqTable.Ready { fqPackage } ->
+                                    Just fqPackage
+
+                                _ ->
+                                    Nothing
+
                         jsonRecords =
                             records
-                                |> List.map .fqPackage
+                                |> List.map (.status >> readyPackage)
                                 |> List.reverse
                                 |> Maybe.Extra.values
                                 |> groupByName
@@ -341,8 +357,6 @@ update msg conn =
                                 )
                                 Dict.empty
                                 fqPackages
-
-                        --|> Encode.list (FQPackage.toString >> Encode.string)
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
@@ -355,7 +369,31 @@ update msg conn =
                     respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetItems (record :: _) ->
-                    respond ( 200, Body.text ("Job " ++ Debug.toString record) ) conn
+                    case record.status of
+                        SeqTable.NewFromRootSite { fqPackage } ->
+                            let
+                                job =
+                                    { fqPackage = fqPackage
+                                    , zipUrl =
+                                        Url.Builder.crossOrigin
+                                            "https://github.com"
+                                            [ Elm.Package.toString fqPackage.name
+                                            , "zipball"
+                                            , Elm.Version.toString fqPackage.version
+                                            ]
+                                            []
+                                    }
+
+                                jobEncoder val =
+                                    Encode.object
+                                        [ ( "fqPackage", FQPackage.encode val.fqPackage )
+                                        , ( "zipUrl", Encode.string val.zipUrl )
+                                        ]
+                            in
+                            respond ( 200, Body.json (jobEncoder job) ) conn
+
+                        _ ->
+                            respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -407,10 +445,9 @@ saveLatestSeqNo timestamp seqNo responseFn conn =
     Dynamo.put
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encode
-        { label = "latest"
-        , seq = seqNo
-        , fqPackage = Nothing
+        { seq = seqNo
         , updatedAt = timestamp
+        , status = SeqTable.Latest
         }
         responseFn
         conn
