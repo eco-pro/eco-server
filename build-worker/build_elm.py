@@ -2,6 +2,7 @@
 import requests as req
 import re
 import zipfile
+import json
 
 
 def getFilename_fromCd(cd):
@@ -22,14 +23,17 @@ print("=== Eco-Server Elm Package Build Script ===")
 print("What job?")
 
 resp = req.get("http://localhost:3000/nextjob")
-status = resp.status_code
 
-if status != 200:
+if resp.status_code != 200:
     print("No job.")
     quit()
 
 job = resp.json()
+seq = job['seq']
 zipUrl = job['zipUrl']
+packageName = job['name']
+author = job['author']
+version = job['version']
 
 # https://github.com/elm/core/zipball/1.0.0/
 
@@ -39,18 +43,45 @@ print(zipUrl)
 
 resp = req.get(zipUrl, allow_redirects=True)
 filename = getFilename_fromCd(resp.headers.get('content-disposition'))
+
+if resp.status_code != 200:
+    print("No zip file found.")
+    req.post("http://localhost:3000/outdated/" + str(seq))
+    quit()
+
 open(filename, 'wb').write(resp.content)
 
-print("Got the .zip, unpacking...")
+print("Got " + filename + ", unpacking...")
 
-with zipfile.ZipFile(filename,"r") as zip_ref:
+with zipfile.ZipFile(filename, "r") as zip_ref:
     zip_ref.extractall(".")
 
 # Extract the elm.json, and POST it to the package server.
-
 print("Is it an Elm 19 project? Skip if not.")
 
-print("Found elm.json, posting to package server...")
+try:
+    with open(packageName + "-" + version + "/" + "elm.json") as json_file:
+        data = json.load(json_file)
+
+        elmCompilerVersion = data['elm-version']
+
+        if elmCompilerVersion.startswith('0.19.0'):
+            print("Compile with Elm 0.19.0")
+        elif elmCompilerVersion.startswith('0.19.1'):
+            print("Compile with Elm 0.19.1")
+        else:
+            print("Unsupported Elm version.")
+            req.post("http://localhost:3000/outdated/" + str(seq))
+            quit()
+
+        print("Found valid elm.json, posting to package server...")
+
+except IOError:
+    print("No " + packageName + "-" + version + "/" + "elm.json")
+    req.post("http://localhost:3000/outdated/" + str(seq))
+    quit()
+
+req.post("http://localhost:3000/outdated/" + str(seq))
 
 # Copy the package .zip onto its S3 location.
 

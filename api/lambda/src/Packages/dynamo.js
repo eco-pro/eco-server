@@ -57,6 +57,25 @@ let dynamoPut = (responsePort, correlationId, interopId, params) => {
   });
 }
 
+let dynamoDelete = (responsePort, correlationId, interopId, params) => {
+  DocumentClient.delete(params, (error, result) => {
+    var deleteResponse;
+
+    if (error) {
+      deleteResponse = {
+        type_: "Error",
+        errorMsg: JSON.stringify(error, null, 2) + "\n" + JSON.stringify(params, null, 2)
+      };
+    } else {
+      deleteResponse = {
+        type_: "Ok"
+      }
+    }
+
+    responsePort.send([correlationId, interopId, deleteResponse]);
+  });
+}
+
 let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
   DocumentClient.batchGet(params, (error, result) => {
     var getResponse;
@@ -82,7 +101,7 @@ let dynamoBatchGet = (responsePort, correlationId, interopId, params) => {
   });
 }
 
-let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
+let dynamoBatchWrite = (responsePort, correlationId, interopId, params) => {
   DocumentClient.batchWrite(params, (error, result) => {
     var putResponse;
 
@@ -104,7 +123,7 @@ let dynamoBatchPut = (responsePort, correlationId, interopId, params) => {
 let dynamoQuery = (responsePort, correlationId, interopId, params) => {
   DocumentClient.query(params, (error, result) => {
     var getResponse;
-    
+
     if (error) {
       getResponse = {
         type_: "Error",
@@ -136,8 +155,9 @@ DynamoDBPorts.prototype.subscribe =
     app,
     dynamoGetPortName,
     dynamoPutPortName,
+    dynamoDeletePortName,
     dynamoBatchGetPortName,
-    dynamoBatchPutPortName,
+    dynamoBatchWritePortName,
     dynamoQueryPortName,
     dynamoResponsePortName
 
@@ -149,11 +169,14 @@ DynamoDBPorts.prototype.subscribe =
     if (!dynamoPutPortName)
       dynamoPutPortName = "dynamoPutPort";
 
+    if (!dynamoDeletePortName)
+        dynamoDeletePortName = "dynamoDeletePort";
+
     if (!dynamoBatchGetPortName)
       dynamoBatchGetPortName = "dynamoBatchGetPort";
 
-    if (!dynamoBatchPutPortName)
-      dynamoBatchPutPortName = "dynamoBatchPutPort";
+    if (!dynamoBatchWritePortName)
+      dynamoBatchWritePortName = "dynamoBatchWritePort";
 
     if (!dynamoQueryPortName)
       dynamoQueryPortName = "dynamoQueryPort";
@@ -183,6 +206,14 @@ DynamoDBPorts.prototype.subscribe =
       console.warn("The " + dynamoPutPortName + " port is not connected.");
     }
 
+    if (app.ports[dynamoDeletePortName]) {
+      app.ports[dynamoDeletePortName].subscribe(args => {
+        dynamoDelete(dynamoResponsePort, args[0], args[1], args[2]);
+      });
+    } else {
+      console.warn("The " + dynamoDeletePortName + " port is not connected.");
+    }
+
     if (app.ports[dynamoBatchGetPortName]) {
       app.ports[dynamoBatchGetPortName].subscribe(args => {
         dynamoBatchGet(dynamoResponsePort, args[0], args[1], args[2]);
@@ -191,9 +222,9 @@ DynamoDBPorts.prototype.subscribe =
       console.warn("The " + dynamoBatchGetPortName + " port is not connected.");
     }
 
-    if (app.ports[dynamoBatchPutPortName]) {
-      app.ports[dynamoBatchPutPortName].subscribe(args => {
-        dynamoBatchPut(dynamoResponsePort, args[0], args[1], args[2]);
+    if (app.ports[dynamoBatchWritePortName]) {
+      app.ports[dynamoBatchWritePortName].subscribe(args => {
+        dynamoBatchWrite(dynamoResponsePort, args[0], args[1], args[2]);
       });
     } else {
       console.warn("The " + dynamoPutPortName + " port is not connected.");

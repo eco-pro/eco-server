@@ -32,7 +32,8 @@ const dynamoPorts = new DynamoDBPorts();
 dynamoPorts.subscribe(app,
   "dynamoGetPort",
   "dynamoPutPort",
+  "dynamoDeletePort",
   "dynamoBatchGetPort",
-  "dynamoBatchPutPort",
+  "dynamoBatchWritePort",
   "dynamoQueryPort",
   "dynamoResponsePort");

@@ -4,11 +4,12 @@ port module Packages.Dynamo exposing
     , get, GetResponse(..)
     , batchGet, BatchGetResponse(..)
     , batchPut
+    , updateKey
     , Query, QueryResponse, Order(..), query, partitionKeyEquals, limitResults, orderResults
     , rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
     , rangeKeyGreaterThanOrEqual, rangeKeyBetween
     , int, string
-    , dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
+    , dynamoPutPort, dynamoGetPort, dynamoBatchWritePort, dynamoBatchGetPort, dynamoQueryPort
     , dynamoResponsePort
     )
 
@@ -26,6 +27,7 @@ port module Packages.Dynamo exposing
 @docs get, GetResponse
 @docs batchGet, BatchGetResponse
 @docs batchPut
+@docs updateKey
 
 
 # Database Queries
@@ -38,7 +40,7 @@ port module Packages.Dynamo exposing
 
 # Ports
 
-@docs dynamoPutPort, dynamoGetPort, dynamoBatchPutPort, dynamoBatchGetPort, dynamoQueryPort
+@docs dynamoPutPort, dynamoGetPort, dynamoBatchWritePort, dynamoBatchGetPort, dynamoQueryPort
 @docs @dopcs dynamoResponsePort
 
 -}
@@ -65,10 +67,13 @@ port dynamoGetPort : InteropRequestPort Value msg
 port dynamoPutPort : InteropRequestPort Value msg
 
 
+port dynamoDeletePort : InteropRequestPort Value msg
+
+
 port dynamoBatchGetPort : InteropRequestPort Value msg
 
 
-port dynamoBatchPutPort : InteropRequestPort Value msg
+port dynamoBatchWritePort : InteropRequestPort Value msg
 
 
 port dynamoQueryPort : InteropRequestPort Value msg
@@ -234,6 +239,129 @@ getResponseDecoder itemDecoder val =
 
 
 
+-- Delete
+
+
+type alias Delete k =
+    { tableName : String
+    , key : k
+    }
+
+
+type DeleteResponse
+    = DeleteOk
+    | DeleteError String
+
+
+delete :
+    String
+    -> (k -> Value)
+    -> k
+    -> (DeleteResponse -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+delete table encoder key responseFn conn =
+    Serverless.interop
+        dynamoDeletePort
+        (deleteEncoder encoder { tableName = table, key = key })
+        (deleteResponseDecoder >> responseFn)
+        conn
+
+
+deleteEncoder : (k -> Value) -> Delete k -> Value
+deleteEncoder encoder deleteOp =
+    Encode.object
+        [ ( "TableName", Encode.string deleteOp.tableName )
+        , ( "Key", encoder deleteOp.key )
+        ]
+
+
+deleteResponseDecoder : Value -> DeleteResponse
+deleteResponseDecoder val =
+    let
+        decoder =
+            Decode.field "type_" Decode.string
+                |> Decode.andThen
+                    (\type_ ->
+                        case type_ of
+                            "Ok" ->
+                                Decode.succeed DeleteOk
+
+                            _ ->
+                                Decode.field "errorMsg" Decode.string
+                                    |> Decode.map DeleteError
+                    )
+    in
+    Decode.decodeValue decoder val
+        |> Result.mapError (Decode.errorToString >> DeleteError)
+        |> Result.Extra.merge
+
+
+
+-- Update Key
+
+
+type alias UpdateKey k a =
+    { tableName : String
+    , oldKey : k
+    , item : a
+    }
+
+
+updateKey :
+    String
+    -> (k -> Value)
+    -> (a -> Value)
+    -> k
+    -> a
+    -> (PutResponse -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+updateKey table keyEncoder itemEncoder oldKey newItem responseFn conn =
+    Serverless.interop
+        dynamoBatchWritePort
+        (updateKeyEncoder
+            { tableName = table
+            , oldKey = keyEncoder oldKey
+            , item = itemEncoder newItem
+            }
+        )
+        (putResponseDecoder >> responseFn)
+        conn
+
+
+updateKeyEncoder : UpdateKey Value Value -> Value
+updateKeyEncoder updateKeyOp =
+    let
+        encodeItem item =
+            Encode.object
+                [ ( "PutRequest"
+                  , Encode.object [ ( "Item", item ) ]
+                  )
+                ]
+
+        encodeKey key =
+            Encode.object
+                [ ( "DeleteRequest"
+                  , Encode.object [ ( "Key", key ) ]
+                  )
+                ]
+    in
+    Encode.object
+        [ ( "RequestItems"
+          , Encode.object
+                [ ( updateKeyOp.tableName
+                  , Encode.list identity
+                        [ encodeItem updateKeyOp.item
+                        , encodeKey updateKeyOp.oldKey
+                        ]
+                  )
+                ]
+          )
+        ]
+
+
+
 -- Batch Put
 
 
@@ -271,7 +399,7 @@ batchPutInner table tagger responseFn vals conn =
             List.drop 25 vals
     in
     Serverless.interop
-        dynamoBatchPutPort
+        dynamoBatchWritePort
         (batchPutEncoder { tableName = table, items = firstBatch })
         (\val ->
             BatchPutLoop (putResponseDecoder val) table tagger responseFn remainder |> tagger

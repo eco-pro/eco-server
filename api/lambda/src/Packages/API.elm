@@ -19,6 +19,7 @@ import Serverless.Conn.Body as Body
 import Serverless.Conn.Request exposing (Method(..), Request, body)
 import Set
 import Task
+import Task.Extra
 import Time exposing (Posix)
 import Tuple
 import Url
@@ -81,6 +82,7 @@ type Route
     | EndpointJson String String String
     | Refresh
     | NextJob
+    | OutdatedPackage Int
     | PackageElmJson
     | PackageLocation
 
@@ -106,6 +108,7 @@ routeParser =
             )
         , map Refresh (s "refresh")
         , map NextJob (s "nextjob")
+        , map OutdatedPackage (s "outdated" </> Url.Parser.int)
         ]
         |> Url.Parser.parse
 
@@ -139,6 +142,13 @@ router conn =
         ( GET, NextJob ) ->
             getLowestNewSeqNo ProvideJobDetails conn
 
+        ( POST, OutdatedPackage seq ) ->
+            ( conn
+            , Time.now
+                |> Task.perform
+                    (TimestampAndThen (\posix -> saveOutdatedSeqNo posix seq MarkedAsOutdated conn))
+            )
+
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
 
@@ -149,6 +159,7 @@ router conn =
 
 type Msg
     = DynamoMsg (Dynamo.Msg Msg)
+    | TimestampAndThen (Posix -> ( Conn, Cmd Msg )) Posix
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
@@ -158,6 +169,7 @@ type Msg
     | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
     | ProvideJobDetails (Dynamo.QueryResponse SeqTable.Record)
+    | MarkedAsOutdated Dynamo.PutResponse
 
 
 customLogger : Msg -> String
@@ -165,6 +177,9 @@ customLogger msg =
     case msg of
         DynamoMsg _ ->
             "DynamoMsg"
+
+        TimestampAndThen _ _ ->
+            "TimestampAndThen"
 
         PassthroughElmJson _ ->
             "PassthroughElmJson"
@@ -193,6 +208,9 @@ customLogger msg =
         ProvideJobDetails _ ->
             "ProvideJobDetails"
 
+        MarkedAsOutdated _ ->
+            "MarkedAsOutdated"
+
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
 update msg conn =
@@ -207,6 +225,9 @@ update msg conn =
                     Dynamo.update innerMsg conn
             in
             ( nextConn, dynamoCmd )
+
+        TimestampAndThen msgFn timestamp ->
+            msgFn timestamp
 
         PassthroughElmJson result ->
             case result of
@@ -228,9 +249,9 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems [] ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 0
+                    , RootSite.fetchAllPackagesSince 6550
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 0)
+                        |> Task.attempt (RefreshPackages 6550)
                     )
 
                 Dynamo.BatchGetItems (record :: _) ->
@@ -373,29 +394,46 @@ update msg conn =
                         SeqTable.NewFromRootSite { fqPackage } ->
                             let
                                 job =
-                                    { fqPackage = fqPackage
+                                    { seq = record.seq
+                                    , fqPackage = fqPackage
                                     , zipUrl =
                                         Url.Builder.crossOrigin
                                             "https://github.com"
                                             [ Elm.Package.toString fqPackage.name
-                                            , "zipball"
-                                            , Elm.Version.toString fqPackage.version
+                                            , "archive"
+                                            , Elm.Version.toString fqPackage.version ++ ".zip"
                                             ]
                                             []
+                                    , author =
+                                        Elm.Package.toString fqPackage.name
+                                            |> String.split "/"
+                                            |> List.head
+                                            |> Maybe.withDefault ""
+                                    , name =
+                                        Elm.Package.toString fqPackage.name
+                                            |> String.split "/"
+                                            |> List.tail
+                                            |> Maybe.map List.head
+                                            |> Maybe.Extra.join
+                                            |> Maybe.withDefault ""
+                                    , version = fqPackage.version
                                     }
-
-                                jobEncoder val =
-                                    Encode.object
-                                        [ ( "fqPackage", FQPackage.encode val.fqPackage )
-                                        , ( "zipUrl", Encode.string val.zipUrl )
-                                        ]
                             in
-                            respond ( 200, Body.json (jobEncoder job) ) conn
+                            respond ( 200, Body.json (encodeBuildJob job) ) conn
 
                         _ ->
                             respond ( 404, Body.text "No job." ) conn
 
                 Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        MarkedAsOutdated res ->
+            case res of
+                Dynamo.PutOk ->
+                    ( conn, Cmd.none )
+                        |> andThen createdOk
+
+                Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
 
 
@@ -453,6 +491,23 @@ saveLatestSeqNo timestamp seqNo responseFn conn =
         conn
 
 
+saveOutdatedSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveOutdatedSeqNo timestamp seqNo responseFn conn =
+    Dynamo.updateKey
+        (fqTableName "eco-elm-seq" conn)
+        SeqTable.encodeKey
+        SeqTable.encode
+        { seq = seqNo
+        , label = SeqTable.LabelNewFromRootSite
+        }
+        { seq = seqNo
+        , updatedAt = timestamp
+        , status = SeqTable.OutdatedPackage
+        }
+        responseFn
+        conn
+
+
 getLowestNewSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
 getLowestNewSeqNo responseFn conn =
     let
@@ -495,6 +550,32 @@ createdOk conn =
 error : String -> Conn -> ( Conn, Cmd Msg )
 error msg conn =
     respond ( 500, Body.text msg ) conn
+
+
+
+-- Build Jobs
+
+
+type alias BuildJob =
+    { seq : Int
+    , fqPackage : FQPackage
+    , zipUrl : String
+    , author : String
+    , name : String
+    , version : Elm.Version.Version
+    }
+
+
+encodeBuildJob : BuildJob -> Value
+encodeBuildJob val =
+    Encode.object
+        [ ( "seq", Encode.int val.seq )
+        , ( "fqPackage", FQPackage.encode val.fqPackage )
+        , ( "zipUrl", Encode.string val.zipUrl )
+        , ( "author", Encode.string val.author )
+        , ( "name", Encode.string val.name )
+        , ( "version", Elm.Version.encode val.version )
+        ]
 
 
 
