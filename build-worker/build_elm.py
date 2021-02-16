@@ -4,7 +4,8 @@ import re
 import zipfile
 import json
 import hashlib
-
+import os
+import subprocess
 
 def zip_file_md5(archive):
     """
@@ -44,7 +45,11 @@ def report_error(seq, errorMsg):
 
 print("=== Eco-Server Elm Package Build Script ===")
 
+start_dir = os.getcwd()
+
 while True:
+    os.chdir(start_dir)
+
     # Check on the package server what job to do next, if any.
     print("\n  What job?")
 
@@ -92,8 +97,14 @@ while True:
 
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
+                os.chdir(packageName + "-" + version)
+                subprocess.run(["elm", "make", "--docs=docs.json"])
+
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
+                os.chdir(packageName + "-" + version)
+                subprocess.run(["elm", "make", "--docs=docs.json"])
+
             else:
                 print("== Error: Unsupported Elm version.")
                 report_error(seq, "Unsupported Elm version.")
