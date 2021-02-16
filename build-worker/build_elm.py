@@ -21,9 +21,9 @@ print("=== Eco-Server Elm Package Build Script ===")
 
 while True:
     # Check on the package server what job to do next, if any.
-    print("What job?")
+    print("\n  What job?")
 
-    resp = req.get("http://localhost:3000/nextjob")
+    resp = req.get("http://localhost:3000/packages/nextjob")
 
     if resp.status_code != 200:
         print("No job.")
@@ -46,8 +46,9 @@ while True:
     filename = getFilename_fromCd(resp.headers.get('content-disposition'))
 
     if resp.status_code != 200:
-        print("No zip file found.")
-        req.post("http://localhost:3000/error/" + str(seq))
+        print("== Error: No zip file found.")
+        req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+                 json = {"errorMsg": "No zip file found."})
         continue
 
     open(filename, 'wb').write(resp.content)
@@ -71,15 +72,17 @@ while True:
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
             else:
-                print("Unsupported Elm version.")
-                req.post("http://localhost:3000/error/" + str(seq))
+                print("== Error: Unsupported Elm version.")
+                req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+                         json = {"errorMsg": "Unsupported Elm version."})
                 continue
 
                 print("Found valid elm.json, posting to package server...")
 
     except IOError:
-        print("No " + packageName + "-" + version + "/" + "elm.json")
-        req.post("http://localhost:3000/error/" + str(seq))
+        print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
+        req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+                 json = {"errorMsg": "No 'elm.json' file."})
         continue
 
     # Copy the package .zip onto its S3 location.
@@ -91,6 +94,7 @@ while True:
     # POST to the package server to tell it the job is complete.
 
     print("Letting the package server know where to find it...")
-    req.post("http://localhost:3000/ready/" + str(seq), json=data)
+    req.post("http://localhost:3000/packages/" +
+             str(seq) + "/ready", json=data)
 
     print("Job done. Try looking for the next job...")

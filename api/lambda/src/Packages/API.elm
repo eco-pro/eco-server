@@ -106,10 +106,10 @@ routeParser =
                 </> Url.Parser.string
                 </> s "endpoint.json"
             )
-        , map Refresh (s "refresh")
-        , map NextJob (s "nextjob")
-        , map PackageError (s "error" </> Url.Parser.int)
-        , map PackageReady (s "ready" </> Url.Parser.int)
+        , map Refresh (s "packages" </> s "refresh")
+        , map NextJob (s "packages" </> s "nextjob")
+        , map PackageError (s "packages" </> Url.Parser.int </> s "error")
+        , map PackageReady (s "packages" </> Url.Parser.int </> s "ready")
         ]
         |> Url.Parser.parse
 
@@ -144,14 +144,10 @@ router conn =
             getLowestNewSeqNo ProvideJobDetails conn
 
         ( POST, PackageError seq ) ->
-            ( conn
-            , Time.now
-                |> Task.perform
-                    (TimestampAndThen (\posix -> saveErrorSeqNo posix seq (SavedSeqNoState seq) conn))
-            )
+            getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
 
         ( POST, PackageReady seq ) ->
-            getNewSeqNo seq (LoadedSeqNoState seq) conn
+            getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -172,7 +168,7 @@ type Msg
     | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
     | ProvideJobDetails (Dynamo.QueryResponse SeqTable.Record)
-    | LoadedSeqNoState Int (Dynamo.GetResponse SeqTable.Record)
+    | LoadedSeqNoState Int (SeqTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse SeqTable.Record)
     | SavedSeqNoState Int Dynamo.PutResponse
 
 
@@ -209,7 +205,7 @@ customLogger msg =
         ProvideJobDetails _ ->
             "ProvideJobDetails"
 
-        LoadedSeqNoState _ _ ->
+        LoadedSeqNoState _ _ _ ->
             "LoadedSeqNoState"
 
         SavedSeqNoState _ _ ->
@@ -253,9 +249,9 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems [] ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 6000
+                    , RootSite.fetchAllPackagesSince 6557
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 6000)
+                        |> Task.attempt (RefreshPackages 6557)
                     )
 
                 Dynamo.BatchGetItems (record :: _) ->
@@ -420,47 +416,15 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        LoadedSeqNoState seqNo getResponse ->
-            let
-                elmJsonResult =
-                    Conn.request conn
-                        |> Request.body
-                        |> Body.asJson
-                        |> Result.andThen
-                            (\val ->
-                                Decode.decodeValue Elm.Project.decoder val
-                                    |> Result.mapError Decode.errorToString
-                            )
-            in
-            case ( elmJsonResult, getResponse ) of
-                ( Ok elmJson, Dynamo.GetItem record ) ->
-                    case record.status of
-                        SeqTable.NewFromRootSite { fqPackage } ->
-                            ( conn
-                            , Time.now
-                                |> Task.perform
-                                    (TimestampAndThen
-                                        (\posix ->
-                                            saveReadySeqNo posix
-                                                seqNo
-                                                fqPackage
-                                                elmJson
-                                                (SavedSeqNoState seqNo)
-                                                conn
-                                        )
-                                    )
-                            )
+        LoadedSeqNoState seqNo recordFn getResponse ->
+            case getResponse of
+                Dynamo.GetItem record ->
+                    recordFn record conn
 
-                        _ ->
-                            error "Item with seqNo not found in correct state." conn
+                Dynamo.GetItemNotFound ->
+                    error "Item not found." conn
 
-                ( Err decodeErrMsg, _ ) ->
-                    error decodeErrMsg conn
-
-                ( _, Dynamo.GetItemNotFound ) ->
-                    error "Item with seqNo not found." conn
-
-                ( _, Dynamo.GetError dbErrorMsg ) ->
+                Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
         SavedSeqNoState seqNo res ->
@@ -480,6 +444,84 @@ andThen fn ( model, cmd ) =
             fn model
     in
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
+
+
+updateAsReady : Int -> SeqTable.Record -> Conn -> ( Conn, Cmd Msg )
+updateAsReady seqNo record conn =
+    let
+        elmJsonResult =
+            Conn.request conn
+                |> Request.body
+                |> Body.asJson
+                |> Result.andThen
+                    (\val ->
+                        Decode.decodeValue Elm.Project.decoder val
+                            |> Result.mapError Decode.errorToString
+                    )
+    in
+    case elmJsonResult of
+        Ok elmJson ->
+            case record.status of
+                SeqTable.NewFromRootSite { fqPackage } ->
+                    ( conn
+                    , Time.now
+                        |> Task.perform
+                            (TimestampAndThen
+                                (\posix ->
+                                    saveReadySeqNo posix
+                                        seqNo
+                                        fqPackage
+                                        elmJson
+                                        (SavedSeqNoState seqNo)
+                                        conn
+                                )
+                            )
+                    )
+
+                _ ->
+                    error "Item with seqNo not found in correct state." conn
+
+        Err decodeErrMsg ->
+            error decodeErrMsg conn
+
+
+updateAsError : Int -> SeqTable.Record -> Conn -> ( Conn, Cmd Msg )
+updateAsError seq record conn =
+    let
+        errorMsgResult =
+            Conn.request conn
+                |> Request.body
+                |> Body.asJson
+                |> Result.andThen
+                    (\val ->
+                        Decode.decodeValue (Decode.field "errorMsg" Decode.string) val
+                            |> Result.mapError Decode.errorToString
+                    )
+    in
+    case errorMsgResult of
+        Ok errorMsg ->
+            case record.status of
+                SeqTable.NewFromRootSite { fqPackage } ->
+                    ( conn
+                    , Time.now
+                        |> Task.perform
+                            (TimestampAndThen
+                                (\posix ->
+                                    saveErrorSeqNo posix
+                                        seq
+                                        fqPackage
+                                        errorMsg
+                                        (SavedSeqNoState seq)
+                                        conn
+                                )
+                            )
+                    )
+
+                _ ->
+                    error "Item with seqNo not found in correct state." conn
+
+        Err decodeErrMsg ->
+            error decodeErrMsg conn
 
 
 saveAllPackages :
@@ -527,8 +569,8 @@ saveLatestSeqNo timestamp seqNo responseFn conn =
         conn
 
 
-saveErrorSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveErrorSeqNo timestamp seqNo responseFn conn =
+saveErrorSeqNo : Posix -> Int -> FQPackage -> String -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveErrorSeqNo timestamp seqNo fqPackage errorMsg responseFn conn =
     Dynamo.updateKey
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
@@ -538,7 +580,7 @@ saveErrorSeqNo timestamp seqNo responseFn conn =
         }
         { seq = seqNo
         , updatedAt = timestamp
-        , status = SeqTable.Error "error"
+        , status = SeqTable.Error { fqPackage = fqPackage, errorMsg = errorMsg }
         }
         responseFn
         conn

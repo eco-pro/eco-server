@@ -18,7 +18,10 @@ type Status
 
         --, packageUrl : Url
         }
-    | Error String
+    | Error
+        { fqPackage : FQPackage
+        , errorMsg : String
+        }
 
 
 type Label
@@ -102,8 +105,10 @@ encodeStatus status =
             , ( "elmJson", Elm.Project.encode elmJson )
             ]
 
-        Error errorMsg ->
-            [ ( "errorMsg", Encode.string errorMsg ) ]
+        Error { fqPackage, errorMsg } ->
+            [ ( "fqPackage", FQPackage.encode fqPackage )
+            , ( "errorMsg", Encode.string errorMsg )
+            ]
 
 
 decoder : Decoder Record
@@ -139,8 +144,15 @@ statusDecoder =
                             |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
 
                     _ ->
-                        Decode.field "errorMsg" Decode.string
-                            |> Decode.map Error
+                        Decode.succeed
+                            (\fqp errorMsg ->
+                                Error
+                                    { fqPackage = fqp
+                                    , errorMsg = errorMsg
+                                    }
+                            )
+                            |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
+                            |> decodeAndMap (Decode.field "errorMsg" Decode.string)
             )
 
 
