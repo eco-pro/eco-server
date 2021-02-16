@@ -5,6 +5,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Time exposing (Posix)
+import Url exposing (Url)
 
 
 type Status
@@ -15,8 +16,8 @@ type Status
     | Ready
         { fqPackage : FQPackage
         , elmJson : Project
-
-        --, packageUrl : Url
+        , packageUrl : Url
+        , md5 : String
         }
     | Error
         { fqPackage : FQPackage
@@ -100,9 +101,11 @@ encodeStatus status =
         NewFromRootSite { fqPackage } ->
             [ ( "fqPackage", FQPackage.encode fqPackage ) ]
 
-        Ready { fqPackage, elmJson } ->
+        Ready { fqPackage, elmJson, packageUrl, md5 } ->
             [ ( "fqPackage", FQPackage.encode fqPackage )
             , ( "elmJson", Elm.Project.encode elmJson )
+            , ( "packageUrl", encodeUrl packageUrl )
+            , ( "md5", Encode.string md5 )
             ]
 
         Error { fqPackage, errorMsg } ->
@@ -134,14 +137,18 @@ statusDecoder =
 
                     "ready" ->
                         Decode.succeed
-                            (\fqp elmJson ->
+                            (\fqp elmJson url md5 ->
                                 Ready
                                     { fqPackage = fqp
                                     , elmJson = elmJson
+                                    , packageUrl = url
+                                    , md5 = md5
                                     }
                             )
                             |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
                             |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
+                            |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
+                            |> decodeAndMap (Decode.field "md5" Decode.string)
 
                     _ ->
                         Decode.succeed
@@ -171,3 +178,24 @@ encodeKey record =
 decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b
 decodeAndMap =
     Decode.map2 (|>)
+
+
+decodeUrl : Decoder Url.Url
+decodeUrl =
+    Decode.string
+        |> Decode.map Url.fromString
+        |> Decode.andThen
+            (\maybeUrl ->
+                case maybeUrl of
+                    Nothing ->
+                        Decode.fail "Not a valid URL."
+
+                    Just val ->
+                        Decode.succeed val
+            )
+
+
+encodeUrl : Url -> Value
+encodeUrl url =
+    Url.toString url
+        |> Encode.string

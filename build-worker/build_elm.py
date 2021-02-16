@@ -3,6 +3,23 @@ import requests as req
 import re
 import zipfile
 import json
+import hashlib
+
+
+def zip_file_md5(archive):
+    """
+    Calculate the MD5 of the .zip file contents.
+    """
+    blocksize = 1024**2  # 1M chunks
+    for fname in archive.namelist():
+        entry = archive.open(fname)
+        md5 = hashlib.md5()
+        while True:
+            block = entry.read(blocksize)
+            if not block:
+                break
+            md5.update(block)
+    return md5.hexdigest()
 
 
 def getFilename_fromCd(cd):
@@ -17,6 +34,14 @@ def getFilename_fromCd(cd):
     return fname[0]
 
 
+def report_error(seq, errorMsg):
+    """
+    Send an error message to /packages/{seqNo}/error
+    """
+    req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+             json={"errorMsg": errorMsg})
+
+
 print("=== Eco-Server Elm Package Build Script ===")
 
 while True:
@@ -26,7 +51,7 @@ while True:
     resp = req.get("http://localhost:3000/packages/nextjob")
 
     if resp.status_code != 200:
-        print("No job.")
+        print("No jobs. All done.")
         quit()
 
     job = resp.json()
@@ -35,8 +60,6 @@ while True:
     packageName = job['name']
     author = job['author']
     version = job['version']
-
-    # https://github.com/elm/core/zipball/1.0.0/
 
     # Download the package .zip from GitHub, and unpack it.
     print("Downloading from GitHub...")
@@ -47,8 +70,7 @@ while True:
 
     if resp.status_code != 200:
         print("== Error: No zip file found.")
-        req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-                 json = {"errorMsg": "No zip file found."})
+        report_error(seq, "No zip file found.")
         continue
 
     open(filename, 'wb').write(resp.content)
@@ -57,6 +79,7 @@ while True:
 
     with zipfile.ZipFile(filename, "r") as zip_ref:
         zip_ref.extractall(".")
+        zip_hash = zip_file_md5(zip_ref)
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
@@ -73,16 +96,14 @@ while True:
                 print("Compile with Elm 0.19.1")
             else:
                 print("== Error: Unsupported Elm version.")
-                req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-                         json = {"errorMsg": "Unsupported Elm version."})
+                report_error(seq, "Unsupported Elm version.")
                 continue
 
                 print("Found valid elm.json, posting to package server...")
 
     except IOError:
         print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
-        req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-                 json = {"errorMsg": "No 'elm.json' file."})
+        report_error(seq, "No 'elm.json' file.")
         continue
 
     # Copy the package .zip onto its S3 location.
@@ -94,7 +115,9 @@ while True:
     # POST to the package server to tell it the job is complete.
 
     print("Letting the package server know where to find it...")
-    req.post("http://localhost:3000/packages/" +
-             str(seq) + "/ready", json=data)
+    req.post("http://localhost:3000/packages/" + str(seq) + "/ready",
+             json={"elmJson": data,
+                   "packageUrl": "http://packages.eco-pro.org/blah",
+                   "md5": zip_hash})
 
     print("Job done. Try looking for the next job...")

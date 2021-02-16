@@ -23,7 +23,7 @@ import Task
 import Task.Extra
 import Time exposing (Posix)
 import Tuple
-import Url
+import Url exposing (Url)
 import Url.Builder
 import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
@@ -449,18 +449,30 @@ andThen fn ( model, cmd ) =
 updateAsReady : Int -> SeqTable.Record -> Conn -> ( Conn, Cmd Msg )
 updateAsReady seqNo record conn =
     let
+        bodyDecoder =
+            Decode.succeed
+                (\elmJson packageUrl md5 ->
+                    { elmJson = elmJson
+                    , packageUrl = packageUrl
+                    , md5 = md5
+                    }
+                )
+                |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
+                |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
+                |> decodeAndMap (Decode.field "md5" Decode.string)
+
         elmJsonResult =
             Conn.request conn
                 |> Request.body
                 |> Body.asJson
                 |> Result.andThen
                     (\val ->
-                        Decode.decodeValue Elm.Project.decoder val
+                        Decode.decodeValue bodyDecoder val
                             |> Result.mapError Decode.errorToString
                     )
     in
     case elmJsonResult of
-        Ok elmJson ->
+        Ok { elmJson, packageUrl, md5 } ->
             case record.status of
                 SeqTable.NewFromRootSite { fqPackage } ->
                     ( conn
@@ -472,6 +484,8 @@ updateAsReady seqNo record conn =
                                         seqNo
                                         fqPackage
                                         elmJson
+                                        packageUrl
+                                        md5
                                         (SavedSeqNoState seqNo)
                                         conn
                                 )
@@ -586,8 +600,17 @@ saveErrorSeqNo timestamp seqNo fqPackage errorMsg responseFn conn =
         conn
 
 
-saveReadySeqNo : Posix -> Int -> FQPackage -> Elm.Project.Project -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveReadySeqNo timestamp seqNo fqPackage elmJson responseFn conn =
+saveReadySeqNo :
+    Posix
+    -> Int
+    -> FQPackage
+    -> Elm.Project.Project
+    -> Url
+    -> String
+    -> (Dynamo.PutResponse -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
+saveReadySeqNo timestamp seqNo fqPackage elmJson packageUrl md5 responseFn conn =
     Dynamo.updateKey
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
@@ -597,7 +620,13 @@ saveReadySeqNo timestamp seqNo fqPackage elmJson responseFn conn =
         }
         { seq = seqNo
         , updatedAt = timestamp
-        , status = SeqTable.Ready { fqPackage = fqPackage, elmJson = elmJson }
+        , status =
+            SeqTable.Ready
+                { fqPackage = fqPackage
+                , elmJson = elmJson
+                , packageUrl = packageUrl
+                , md5 = md5
+                }
         }
         responseFn
         conn
@@ -693,3 +722,27 @@ encodeBuildJob val =
 fqTableName : String -> Conn -> String
 fqTableName name conn =
     (Conn.config conn).dynamoDbNamespace ++ "-" ++ name
+
+
+
+-- Helpers
+
+
+decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b
+decodeAndMap =
+    Decode.map2 (|>)
+
+
+decodeUrl : Decoder Url.Url
+decodeUrl =
+    Decode.string
+        |> Decode.map Url.fromString
+        |> Decode.andThen
+            (\maybeUrl ->
+                case maybeUrl of
+                    Nothing ->
+                        Decode.fail "Not a valid URL."
+
+                    Just val ->
+                        Decode.succeed val
+            )
