@@ -2,6 +2,7 @@ port module Packages.API exposing (main)
 
 import Dict exposing (Dict)
 import Elm.Package
+import Elm.Project
 import Elm.Version
 import Http
 import Json.Decode as Decode exposing (Decoder)
@@ -16,7 +17,7 @@ import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
-import Serverless.Conn.Request exposing (Method(..), Request, body)
+import Serverless.Conn.Request as Request exposing (Method(..), Request, body)
 import Set
 import Task
 import Task.Extra
@@ -82,9 +83,8 @@ type Route
     | EndpointJson String String String
     | Refresh
     | NextJob
-    | OutdatedPackage Int
-    | PackageElmJson
-    | PackageLocation
+    | PackageError Int
+    | PackageReady Int
 
 
 routeParser : Url.Url -> Maybe Route
@@ -108,7 +108,8 @@ routeParser =
             )
         , map Refresh (s "refresh")
         , map NextJob (s "nextjob")
-        , map OutdatedPackage (s "outdated" </> Url.Parser.int)
+        , map PackageError (s "error" </> Url.Parser.int)
+        , map PackageReady (s "ready" </> Url.Parser.int)
         ]
         |> Url.Parser.parse
 
@@ -142,12 +143,15 @@ router conn =
         ( GET, NextJob ) ->
             getLowestNewSeqNo ProvideJobDetails conn
 
-        ( POST, OutdatedPackage seq ) ->
+        ( POST, PackageError seq ) ->
             ( conn
             , Time.now
                 |> Task.perform
-                    (TimestampAndThen (\posix -> saveOutdatedSeqNo posix seq MarkedAsOutdated conn))
+                    (TimestampAndThen (\posix -> saveErrorSeqNo posix seq (SavedSeqNoState seq) conn))
             )
+
+        ( POST, PackageReady seq ) ->
+            getNewSeqNo seq (LoadedSeqNoState seq) conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -165,11 +169,11 @@ type Msg
     | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
     | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave Int Posix Dynamo.PutResponse
-    | SeqNoSave Int Dynamo.PutResponse
     | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
     | ProvideJobDetails (Dynamo.QueryResponse SeqTable.Record)
-    | MarkedAsOutdated Dynamo.PutResponse
+    | LoadedSeqNoState Int (Dynamo.GetResponse SeqTable.Record)
+    | SavedSeqNoState Int Dynamo.PutResponse
 
 
 customLogger : Msg -> String
@@ -196,9 +200,6 @@ customLogger msg =
         PackagesSave seqNo _ _ ->
             "PackagesSave " ++ String.fromInt seqNo
 
-        SeqNoSave seqNo _ ->
-            "SeqNoSave " ++ String.fromInt seqNo
-
         PackagesSinceLoaded _ ->
             "PackagesSinceLoaded"
 
@@ -208,8 +209,11 @@ customLogger msg =
         ProvideJobDetails _ ->
             "ProvideJobDetails"
 
-        MarkedAsOutdated _ ->
-            "MarkedAsOutdated"
+        LoadedSeqNoState _ _ ->
+            "LoadedSeqNoState"
+
+        SavedSeqNoState _ _ ->
+            "SavedSeqNoState"
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -249,9 +253,9 @@ update msg conn =
             case loadResult of
                 Dynamo.BatchGetItems [] ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince 6550
+                    , RootSite.fetchAllPackagesSince 6000
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 6550)
+                        |> Task.attempt (RefreshPackages 6000)
                     )
 
                 Dynamo.BatchGetItems (record :: _) ->
@@ -302,18 +306,7 @@ update msg conn =
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (saveLatestSeqNo timestamp seqNo (SeqNoSave seqNo))
-
-                Dynamo.PutError dbErrorMsg ->
-                    error dbErrorMsg conn
-
-        SeqNoSave seqNo res ->
-            case res of
-                Dynamo.PutOk ->
-                    -- Trigger the processing jobs to populate them all.
-                    -- Signal back to the caller that the request completed ok.
-                    ( conn, Cmd.none )
-                        |> andThen createdOk
+                        |> andThen (saveLatestSeqNo timestamp seqNo (SavedSeqNoState seqNo))
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -427,7 +420,50 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        MarkedAsOutdated res ->
+        LoadedSeqNoState seqNo getResponse ->
+            let
+                elmJsonResult =
+                    Conn.request conn
+                        |> Request.body
+                        |> Body.asJson
+                        |> Result.andThen
+                            (\val ->
+                                Decode.decodeValue Elm.Project.decoder val
+                                    |> Result.mapError Decode.errorToString
+                            )
+            in
+            case ( elmJsonResult, getResponse ) of
+                ( Ok elmJson, Dynamo.GetItem record ) ->
+                    case record.status of
+                        SeqTable.NewFromRootSite { fqPackage } ->
+                            ( conn
+                            , Time.now
+                                |> Task.perform
+                                    (TimestampAndThen
+                                        (\posix ->
+                                            saveReadySeqNo posix
+                                                seqNo
+                                                fqPackage
+                                                elmJson
+                                                (SavedSeqNoState seqNo)
+                                                conn
+                                        )
+                                    )
+                            )
+
+                        _ ->
+                            error "Item with seqNo not found in correct state." conn
+
+                ( Err decodeErrMsg, _ ) ->
+                    error decodeErrMsg conn
+
+                ( _, Dynamo.GetItemNotFound ) ->
+                    error "Item with seqNo not found." conn
+
+                ( _, Dynamo.GetError dbErrorMsg ) ->
+                    error dbErrorMsg conn
+
+        SavedSeqNoState seqNo res ->
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
@@ -491,8 +527,8 @@ saveLatestSeqNo timestamp seqNo responseFn conn =
         conn
 
 
-saveOutdatedSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveOutdatedSeqNo timestamp seqNo responseFn conn =
+saveErrorSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveErrorSeqNo timestamp seqNo responseFn conn =
     Dynamo.updateKey
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
@@ -502,7 +538,24 @@ saveOutdatedSeqNo timestamp seqNo responseFn conn =
         }
         { seq = seqNo
         , updatedAt = timestamp
-        , status = SeqTable.OutdatedPackage
+        , status = SeqTable.Error "error"
+        }
+        responseFn
+        conn
+
+
+saveReadySeqNo : Posix -> Int -> FQPackage -> Elm.Project.Project -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveReadySeqNo timestamp seqNo fqPackage elmJson responseFn conn =
+    Dynamo.updateKey
+        (fqTableName "eco-elm-seq" conn)
+        SeqTable.encodeKey
+        SeqTable.encode
+        { seq = seqNo
+        , label = SeqTable.LabelNewFromRootSite
+        }
+        { seq = seqNo
+        , updatedAt = timestamp
+        , status = SeqTable.Ready { fqPackage = fqPackage, elmJson = elmJson }
         }
         responseFn
         conn
@@ -518,6 +571,19 @@ getLowestNewSeqNo responseFn conn =
     Dynamo.query
         (fqTableName "eco-elm-seq" conn)
         query
+        SeqTable.decoder
+        responseFn
+        conn
+
+
+getNewSeqNo : Int -> (Dynamo.GetResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
+getNewSeqNo seqNo responseFn conn =
+    Dynamo.get
+        (fqTableName "eco-elm-seq" conn)
+        SeqTable.encodeKey
+        { seq = seqNo
+        , label = SeqTable.LabelNewFromRootSite
+        }
         SeqTable.decoder
         responseFn
         conn

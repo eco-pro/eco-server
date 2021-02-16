@@ -1,5 +1,6 @@
 module Packages.Table.Seq exposing (..)
 
+import Elm.Project exposing (Project)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
@@ -11,26 +12,18 @@ type Status
     | NewFromRootSite
         { fqPackage : FQPackage
         }
-    | OutdatedPackage
-    | ValidElmJson
-        { fqPackage : FQPackage
-
-        --, elmJson : Value
-        }
     | Ready
         { fqPackage : FQPackage
+        , elmJson : Project
 
-        --, elmJson : Value
         --, packageUrl : Url
         }
-    | Error
+    | Error String
 
 
 type Label
     = LabelLatest
     | LabelNewFromRootSite
-    | LabelOutdatedPackage
-    | LabelValidElmJson
     | LabelReady
     | LabelError
 
@@ -72,16 +65,10 @@ statusToLabel status =
         NewFromRootSite _ ->
             LabelNewFromRootSite
 
-        OutdatedPackage ->
-            LabelOutdatedPackage
-
-        ValidElmJson _ ->
-            LabelValidElmJson
-
         Ready _ ->
             LabelReady
 
-        Error ->
+        Error _ ->
             LabelError
 
 
@@ -93,12 +80,6 @@ labelToString label =
 
         LabelNewFromRootSite ->
             "new"
-
-        LabelOutdatedPackage ->
-            "outdated"
-
-        LabelValidElmJson ->
-            "valid-elm-json"
 
         LabelReady ->
             "ready"
@@ -116,17 +97,13 @@ encodeStatus status =
         NewFromRootSite { fqPackage } ->
             [ ( "fqPackage", FQPackage.encode fqPackage ) ]
 
-        OutdatedPackage ->
-            []
+        Ready { fqPackage, elmJson } ->
+            [ ( "fqPackage", FQPackage.encode fqPackage )
+            , ( "elmJson", Elm.Project.encode elmJson )
+            ]
 
-        ValidElmJson { fqPackage } ->
-            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
-
-        Ready { fqPackage } ->
-            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
-
-        Error ->
-            []
+        Error errorMsg ->
+            [ ( "errorMsg", Encode.string errorMsg ) ]
 
 
 decoder : Decoder Record
@@ -150,19 +127,20 @@ statusDecoder =
                         Decode.field "fqPackage" FQPackage.decoder
                             |> Decode.map (\fqp -> NewFromRootSite { fqPackage = fqp })
 
-                    "outdated" ->
-                        Decode.succeed OutdatedPackage
-
-                    "valid-elm-json" ->
-                        Decode.field "fqPackage" FQPackage.decoder
-                            |> Decode.map (\fqp -> ValidElmJson { fqPackage = fqp })
-
                     "ready" ->
-                        Decode.field "fqPackage" FQPackage.decoder
-                            |> Decode.map (\fqp -> Ready { fqPackage = fqp })
+                        Decode.succeed
+                            (\fqp elmJson ->
+                                Ready
+                                    { fqPackage = fqp
+                                    , elmJson = elmJson
+                                    }
+                            )
+                            |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
+                            |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
 
                     _ ->
-                        Decode.succeed Error
+                        Decode.field "errorMsg" Decode.string
+                            |> Decode.map Error
             )
 
 
