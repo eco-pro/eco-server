@@ -98,12 +98,20 @@ while True:
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
                 os.chdir(packageName + "-" + version)
-                subprocess.run(["elm", "make", "--docs=docs.json"])
+                elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
+
+                if elmResult.returncode != 0:
+                    report_error(seq, "Failed to compile.")
+                    continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
                 os.chdir(packageName + "-" + version)
-                subprocess.run(["elm", "make", "--docs=docs.json"])
+                elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
+
+                if elmResult.returncode != 0:
+                    report_error(seq, "Failed to compile.")
+                    continue
 
             else:
                 print("== Error: Unsupported Elm version.")
