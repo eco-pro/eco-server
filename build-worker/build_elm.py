@@ -128,20 +128,20 @@ while True:
         zipnames = zip_ref.namelist()
         filterednames = [n for n in zipnames if is_elm_package_file(n)]
         for zipname in filterednames:
-                zip_ref.extract(zipname)
+                zip_ref.extract(zipname, path = author + "/")
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
     try:
-        with open(packageName + "-" + version + "/" + "elm.json") as json_file:
+        with open(author + "/" + packageName + "-" + version + "/" + "elm.json") as json_file:
             data = json.load(json_file)
 
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
-                os.chdir(packageName + "-" + version)
+                os.chdir(author + "/" + packageName + "-" + version)
                 elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
@@ -150,7 +150,7 @@ while True:
 
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
-                os.chdir(packageName + "-" + version)
+                os.chdir(author + "/" + packageName + "-" + version)
                 elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
