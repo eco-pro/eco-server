@@ -6,6 +6,7 @@ import json
 import hashlib
 import os
 import subprocess
+import pathlib
 
 def zip_file_md5(archive):
     """
@@ -42,6 +43,48 @@ def report_error(seq, errorMsg):
     req.post("http://localhost:3000/packages/" + str(seq) + "/error",
              json={"errorMsg": errorMsg})
 
+escaped_glob_tokens_to_re = dict((
+    # Order of ``**/`` and ``/**`` in RE tokenization pattern doesn't matter because ``**/`` will be caught first no matter what, making ``/**`` the only option later on.
+    # W/o leading or trailing ``/`` two consecutive asterisks will be treated as literals.
+    ('/\*\*', '(?:/.+?)*'), # Edge-case #1. Catches recursive globs in the middle of path. Requires edge case #2 handled after this case.
+    ('\*\*/', '(?:^.+?/)*'), # Edge-case #2. Catches recursive globs at the start of path. Requires edge case #1 handled before this case. ``^`` is used to ensure proper location for ``**/``.
+    ('\*', '[^/]*?'), # ``[^/]*?`` is used to ensure that ``*`` won't match subdirs, as with naive ``.*?`` solution.
+    ('\?', '.'),
+    ('\[\*\]', '\*'), # Escaped special glob character.
+    ('\[\?\]', '\?'), # Escaped special glob character.
+    ('\[!', '[^'), # Requires ordered dict, so that ``\[!`` preceded ``\[`` in RE pattern. Needed mostly to differentiate between ``!`` used within character class ``[]`` and outside of it, to avoid faulty conversion.
+    ('\[', '['),
+    ('\]', ']'),
+))
+
+escaped_glob_replacement = re.compile('(%s)' % '|'.join(escaped_glob_tokens_to_re).replace('\\', '\\\\\\'))
+
+def glob_to_re(pattern):
+    return escaped_glob_replacement.sub(lambda match: escaped_glob_tokens_to_re[match.group(0)], re.escape(pattern))
+
+def globmatch(path, pattern):
+    return re.fullmatch(glob_to_re(pattern), path)
+
+def is_elm_package_file(pathname):
+    """
+    Matches filepath names that are part of a .elm package, and no others.
+    package/README.md
+    package/LICENSE
+    package/elm.json
+    package/src/**/*.elm
+    """
+    if globmatch(pathname, "*/README.md"):
+        return True
+    elif globmatch(pathname, "*/LICENSE"):
+        return True
+    elif globmatch(pathname, "*/elm.json"):
+        return True
+    elif globmatch(pathname, "*/src/**/*.elm"):
+        return True
+    elif globmatch(pathname, "*/src/**/*.js"):
+        return True
+    else:
+        return False
 
 print("=== Eco-Server Elm Package Build Script ===")
 
@@ -83,8 +126,12 @@ while True:
     print("Got " + filename + ", unpacking...")
 
     with zipfile.ZipFile(filename, "r") as zip_ref:
-        zip_ref.extractall(".")
         zip_hash = zip_file_md5(zip_ref)
+
+        zipnames = zip_ref.namelist()
+        filterednames = [n for n in zipnames if is_elm_package_file(n)]
+        for zipname in filterednames:
+                zip_ref.extract(zipname)
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
