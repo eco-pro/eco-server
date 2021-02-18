@@ -7,6 +7,7 @@ import hashlib
 import os
 import subprocess
 import pathlib
+import shutil
 
 def zip_file_md5(archive):
     """
@@ -67,11 +68,11 @@ def globmatch(path, pattern):
 
 def is_elm_package_file(pathname):
     """
-    Matches filepath names that are part of a .elm package, and no others.
-    package/README.md
-    package/LICENSE
-    package/elm.json
-    package/src/**/*.elm
+    Matches filepath names that are part of an Elm package, and no others.
+    /README.md
+    /LICENSE
+    /elm.json
+    /src/**
     """
     if globmatch(pathname, "*/README.md"):
         return True
@@ -130,32 +131,42 @@ while True:
         for zipname in filterednames:
                 zip_ref.extract(zipname, path = author + "/")
 
+    os.remove(filename)
+
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
+    os.chdir(author + "/" + packageName + "-" + version)
+
     try:
-        with open(author + "/" + packageName + "-" + version + "/" + "elm.json") as json_file:
+        with open("elm.json") as json_file:
             data = json.load(json_file)
 
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
-                os.chdir(author + "/" + packageName + "-" + version)
                 elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
                     report_error(seq, "Failed to compile.")
                     continue
+
+                print("Compiled Ok.")
+                shutil.rmtree("elm-stuff")
+                os.remove("docs.json")
 
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
-                os.chdir(author + "/" + packageName + "-" + version)
                 elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
                     report_error(seq, "Failed to compile.")
                     continue
+
+                print("Compiled Ok.")
+                shutil.rmtree('elm-stuff')
+                os.remove("docs.json")
 
             else:
                 print("== Error: Unsupported Elm version.")
