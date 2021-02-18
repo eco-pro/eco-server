@@ -79,9 +79,7 @@ def is_elm_package_file(pathname):
         return True
     elif globmatch(pathname, "*/elm.json"):
         return True
-    elif globmatch(pathname, "*/src/**/*.elm"):
-        return True
-    elif globmatch(pathname, "*/src/**/*.js"):
+    elif globmatch(pathname, "*/src/**"):
         return True
     else:
         return False
@@ -127,7 +125,6 @@ while True:
 
     with zipfile.ZipFile(filename, "r") as zip_ref:
         zip_hash = zip_file_md5(zip_ref)
-
         zipnames = zip_ref.namelist()
         filterednames = [n for n in zipnames if is_elm_package_file(n)]
         for zipname in filterednames:
