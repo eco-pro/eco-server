@@ -146,7 +146,7 @@ while True:
 
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
-                elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
+                elmResult = subprocess.run(["elm19", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
                     report_error(seq, "Failed to compile.")
@@ -179,6 +179,16 @@ while True:
         print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
         report_error(seq, "No 'elm.json' file.")
         continue
+
+    os.chdir(start_dir)
+
+    # Build a .zip of the minimized package.
+    print("Building the canonical Elm package as a .zip file.")
+
+    shutil.make_archive(base_name= packageName + "-" + version,
+                        format= 'zip',
+                        root_dir= author,
+                        base_dir= packageName + "-" + version)
 
     # Copy the package .zip onto its S3 location.
 
