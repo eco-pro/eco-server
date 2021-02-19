@@ -1,6 +1,7 @@
 module Packages.Table.Seq exposing (..)
 
 import Elm.Project exposing (Project)
+import Elm.Version exposing (Version)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
@@ -21,8 +22,17 @@ type Status
         }
     | Error
         { fqPackage : FQPackage
-        , errorMsg : String
+        , errorReason : ErrorReason
         }
+
+
+type ErrorReason
+    = ErrorNoGithubPackage
+    | ErrorPackageRenamed
+    | ErrorElmJsonInvalid String
+    | ErrorNotElmPackage
+    | ErrorUnsupportedElmVersion
+    | ErrorCompileFailed Version
 
 
 type Label
@@ -108,10 +118,31 @@ encodeStatus status =
             , ( "md5", Encode.string md5 )
             ]
 
-        Error { fqPackage, errorMsg } ->
-            [ ( "fqPackage", FQPackage.encode fqPackage )
-            , ( "errorMsg", Encode.string errorMsg )
-            ]
+        Error { fqPackage, errorReason } ->
+            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
+                ++ encodeErrorReason errorReason
+
+
+encodeErrorReason : ErrorReason -> List ( String, Value )
+encodeErrorReason reason =
+    case reason of
+        ErrorNoGithubPackage ->
+            [ ( "errorReason", Encode.string "no-github-package" ) ]
+
+        ErrorPackageRenamed ->
+            [ ( "errorReason", Encode.string "package-renamed" ) ]
+
+        ErrorElmJsonInvalid decodeErrorMsg ->
+            [ ( "errorReason", Encode.string "elm-json-invalid" ) ]
+
+        ErrorNotElmPackage ->
+            [ ( "errorReason", Encode.string "not-elm-package" ) ]
+
+        ErrorUnsupportedElmVersion ->
+            [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
+
+        ErrorCompileFailed version ->
+            [ ( "errorReason", Encode.string "compile-failed" ) ]
 
 
 decoder : Decoder Record
