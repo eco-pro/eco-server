@@ -136,7 +136,11 @@ while True:
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
-    os.chdir(author + "/" + packageName + "-" + version)
+    try:
+        os.chdir(author + "/" + packageName + "-" + version)
+    except FileNotFoundError:
+        report_error(seq, "Downloaded .zip does not match package name (renamed).")
+        continue
 
     try:
         with open("elm.json") as json_file:
