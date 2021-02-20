@@ -46,13 +46,14 @@ def report_error(seq, reason):
              json={"errorReason": reason})
 
 
-def report_compile_error(seq, version):
+def report_compile_error(seq, version, errors):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
     req.post("http://localhost:3000/packages/" + str(seq) + "/error",
              json={"errorReason": "compile-failed",
-                   "compilerVersion": version})
+                   "compilerVersion": version,
+                   "compileErrors": errors})
 
 
 escaped_glob_tokens_to_re = dict((
@@ -171,10 +172,11 @@ while True:
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
                 elmResult = subprocess.run(
-                    ["elm19", "make", "--docs=docs.json"])
+                    ["elm19", "make", "--docs=docs.json", "--report=json"],
+                    capture_output=True)
 
                 if elmResult.returncode != 0:
-                    report_compile_error(seq, "0.19.0")
+                    report_compile_error(seq, "0.19.0", elmResult.stderr.decode('ascii'))
                     continue
 
                 print("Compiled Ok.")
@@ -183,10 +185,10 @@ while True:
 
             elif elmCompilerVersion.startswith('0.19.1'):
                 print("Compile with Elm 0.19.1")
-                elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
+                elmResult = subprocess.run(["elm", "make", "--docs=docs.json", "--report=json"])
 
                 if elmResult.returncode != 0:
-                    report_compile_error(seq, "0.19.1")
+                    report_compile_error(seq, "0.19.1", elmResult.stderr.decode('ascii'))
                     continue
 
                 print("Compiled Ok.")

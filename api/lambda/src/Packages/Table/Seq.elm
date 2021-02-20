@@ -1,5 +1,6 @@
 module Packages.Table.Seq exposing (..)
 
+import Elm.Error
 import Elm.Project exposing (Project)
 import Elm.Version exposing (Version)
 import Json.Decode as Decode exposing (Decoder)
@@ -32,7 +33,7 @@ type ErrorReason
     | ErrorElmJsonInvalid String
     | ErrorNotElmPackage
     | ErrorUnsupportedElmVersion
-    | ErrorCompileFailed Version
+    | ErrorCompileFailed Version Value
     | ErrorOther
 
 
@@ -144,9 +145,10 @@ encodeErrorReason reason =
         ErrorUnsupportedElmVersion ->
             [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
 
-        ErrorCompileFailed version ->
+        ErrorCompileFailed version compileErrors ->
             [ ( "errorReason", Encode.string "compile-failed" )
             , ( "compilerVersion", Elm.Version.encode version )
+            , ( "compileErrors", compileErrors )
             ]
 
         ErrorOther ->
@@ -225,8 +227,12 @@ errorReasonDecoder =
                         Decode.succeed ErrorUnsupportedElmVersion
 
                     "compile-failed" ->
-                        Decode.succeed (\compilerVersion -> ErrorCompileFailed compilerVersion)
+                        Decode.succeed
+                            (\compilerVersion compileErrors ->
+                                ErrorCompileFailed compilerVersion compileErrors
+                            )
                             |> decodeAndMap (Decode.field "compilerVersion" Elm.Version.decoder)
+                            |> decodeAndMap (Decode.field "compileErrors" Decode.value)
 
                     _ ->
                         Decode.succeed ErrorOther
