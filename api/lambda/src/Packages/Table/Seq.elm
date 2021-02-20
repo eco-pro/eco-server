@@ -33,6 +33,7 @@ type ErrorReason
     | ErrorNotElmPackage
     | ErrorUnsupportedElmVersion
     | ErrorCompileFailed Version
+    | ErrorOther
 
 
 type Label
@@ -132,8 +133,10 @@ encodeErrorReason reason =
         ErrorPackageRenamed ->
             [ ( "errorReason", Encode.string "package-renamed" ) ]
 
-        ErrorElmJsonInvalid decodeErrorMsg ->
-            [ ( "errorReason", Encode.string "elm-json-invalid" ) ]
+        ErrorElmJsonInvalid decodeErrMsg ->
+            [ ( "errorReason", Encode.string "elm-json-invalid" )
+            , ( "errorMsg", Encode.string decodeErrMsg )
+            ]
 
         ErrorNotElmPackage ->
             [ ( "errorReason", Encode.string "not-elm-package" ) ]
@@ -142,7 +145,12 @@ encodeErrorReason reason =
             [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
 
         ErrorCompileFailed version ->
-            [ ( "errorReason", Encode.string "compile-failed" ) ]
+            [ ( "errorReason", Encode.string "compile-failed" )
+            , ( "compilerVersion", Elm.Version.encode version )
+            ]
+
+        ErrorOther ->
+            [ ( "errorReason", Encode.string "other" ) ]
 
 
 decoder : Decoder Record
@@ -183,14 +191,45 @@ statusDecoder =
 
                     _ ->
                         Decode.succeed
-                            (\fqp errorMsg ->
+                            (\fqp errorReason ->
                                 Error
                                     { fqPackage = fqp
-                                    , errorMsg = errorMsg
+                                    , errorReason = errorReason
                                     }
                             )
                             |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
+                            |> decodeAndMap errorReasonDecoder
+            )
+
+
+errorReasonDecoder : Decoder ErrorReason
+errorReasonDecoder =
+    Decode.field "errorReason" Decode.string
+        |> Decode.andThen
+            (\reason ->
+                case reason of
+                    "no-github-package" ->
+                        Decode.succeed ErrorNoGithubPackage
+
+                    "package-renamed" ->
+                        Decode.succeed ErrorPackageRenamed
+
+                    "elm-json-invalid" ->
+                        Decode.succeed (\errorMsg -> ErrorElmJsonInvalid errorMsg)
                             |> decodeAndMap (Decode.field "errorMsg" Decode.string)
+
+                    "not-elm-package" ->
+                        Decode.succeed ErrorNotElmPackage
+
+                    "unsupported-elm-version" ->
+                        Decode.succeed ErrorUnsupportedElmVersion
+
+                    "compile-failed" ->
+                        Decode.succeed (\compilerVersion -> ErrorCompileFailed compilerVersion)
+                            |> decodeAndMap (Decode.field "compilerVersion" Elm.Version.decoder)
+
+                    _ ->
+                        Decode.succeed ErrorOther
             )
 
 

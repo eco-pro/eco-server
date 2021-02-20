@@ -9,6 +9,7 @@ import subprocess
 import pathlib
 import shutil
 
+
 def zip_file_md5(archive):
     """
     Calculate the MD5 of the .zip file contents.
@@ -37,34 +38,52 @@ def getFilename_fromCd(cd):
     return fname[0]
 
 
-def report_error(seq, errorMsg):
+def report_error(seq, reason):
     """
     Send an error message to /packages/{seqNo}/error
     """
     req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-             json={"errorMsg": errorMsg})
+             json={"errorReason": reason})
+
+
+def report_compile_error(seq, version):
+    """
+    Send an error message to /packages/{seqNo}/error for a compile error.
+    """
+    req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+             json={"errorReason": "compile-failed",
+                   "compilerVersion": version})
+
 
 escaped_glob_tokens_to_re = dict((
     # Order of ``**/`` and ``/**`` in RE tokenization pattern doesn't matter because ``**/`` will be caught first no matter what, making ``/**`` the only option later on.
     # W/o leading or trailing ``/`` two consecutive asterisks will be treated as literals.
-    ('/\*\*', '(?:/.+?)*'), # Edge-case #1. Catches recursive globs in the middle of path. Requires edge case #2 handled after this case.
-    ('\*\*/', '(?:^.+?/)*'), # Edge-case #2. Catches recursive globs at the start of path. Requires edge case #1 handled before this case. ``^`` is used to ensure proper location for ``**/``.
-    ('\*', '[^/]*?'), # ``[^/]*?`` is used to ensure that ``*`` won't match subdirs, as with naive ``.*?`` solution.
+    # Edge-case #1. Catches recursive globs in the middle of path. Requires edge case #2 handled after this case.
+    ('/\*\*', '(?:/.+?)*'),
+    # Edge-case #2. Catches recursive globs at the start of path. Requires edge case #1 handled before this case. ``^`` is used to ensure proper location for ``**/``.
+    ('\*\*/', '(?:^.+?/)*'),
+    # ``[^/]*?`` is used to ensure that ``*`` won't match subdirs, as with naive ``.*?`` solution.
+    ('\*', '[^/]*?'),
     ('\?', '.'),
-    ('\[\*\]', '\*'), # Escaped special glob character.
-    ('\[\?\]', '\?'), # Escaped special glob character.
-    ('\[!', '[^'), # Requires ordered dict, so that ``\[!`` preceded ``\[`` in RE pattern. Needed mostly to differentiate between ``!`` used within character class ``[]`` and outside of it, to avoid faulty conversion.
+    ('\[\*\]', '\*'),  # Escaped special glob character.
+    ('\[\?\]', '\?'),  # Escaped special glob character.
+    # Requires ordered dict, so that ``\[!`` preceded ``\[`` in RE pattern. Needed mostly to differentiate between ``!`` used within character class ``[]`` and outside of it, to avoid faulty conversion.
+    ('\[!', '[^'),
     ('\[', '['),
     ('\]', ']'),
 ))
 
-escaped_glob_replacement = re.compile('(%s)' % '|'.join(escaped_glob_tokens_to_re).replace('\\', '\\\\\\'))
+escaped_glob_replacement = re.compile('(%s)' % '|'.join(
+    escaped_glob_tokens_to_re).replace('\\', '\\\\\\'))
+
 
 def glob_to_re(pattern):
     return escaped_glob_replacement.sub(lambda match: escaped_glob_tokens_to_re[match.group(0)], re.escape(pattern))
 
+
 def globmatch(path, pattern):
     return re.fullmatch(glob_to_re(pattern), path)
+
 
 def is_elm_package_file(pathname):
     """
@@ -84,6 +103,7 @@ def is_elm_package_file(pathname):
         return True
     else:
         return False
+
 
 print("=== Eco-Server Elm Package Build Script ===")
 
@@ -117,7 +137,7 @@ while True:
 
     if resp.status_code != 200:
         print("== Error: No zip file found.")
-        report_error(seq, "No zip file found.")
+        report_error(seq, "no-github-package")
         continue
 
     open(filename, 'wb').write(resp.content)
@@ -129,7 +149,7 @@ while True:
         zipnames = zip_ref.namelist()
         filterednames = [n for n in zipnames if is_elm_package_file(n)]
         for zipname in filterednames:
-                zip_ref.extract(zipname, path = author + "/")
+            zip_ref.extract(zipname, path=author + "/")
 
     os.remove(filename)
 
@@ -139,7 +159,7 @@ while True:
     try:
         os.chdir(author + "/" + packageName + "-" + version)
     except FileNotFoundError:
-        report_error(seq, "Downloaded .zip does not match package name (renamed).")
+        report_error(seq, "package-renamed")
         continue
 
     try:
@@ -150,10 +170,11 @@ while True:
 
             if elmCompilerVersion.startswith('0.19.0'):
                 print("Compile with Elm 0.19.0")
-                elmResult = subprocess.run(["elm19", "make", "--docs=docs.json"])
+                elmResult = subprocess.run(
+                    ["elm19", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
-                    report_error(seq, "Failed to compile.")
+                    report_compile_error(seq, "0.19.0")
                     continue
 
                 print("Compiled Ok.")
@@ -165,7 +186,7 @@ while True:
                 elmResult = subprocess.run(["elm", "make", "--docs=docs.json"])
 
                 if elmResult.returncode != 0:
-                    report_error(seq, "Failed to compile.")
+                    report_compile_error(seq, "0.19.1")
                     continue
 
                 print("Compiled Ok.")
@@ -174,14 +195,14 @@ while True:
 
             else:
                 print("== Error: Unsupported Elm version.")
-                report_error(seq, "Unsupported Elm version.")
+                report_error(seq, "unsupported-elm-version")
                 continue
 
                 print("Found valid elm.json, posting to package server...")
 
     except IOError:
         print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
-        report_error(seq, "No 'elm.json' file.")
+        report_error(seq, "not-elm-package")
         continue
 
     os.chdir(start_dir)
@@ -189,10 +210,10 @@ while True:
     # Build a .zip of the minimized package.
     print("Building the canonical Elm package as a .zip file.")
 
-    shutil.make_archive(base_name= packageName + "-" + version,
-                        format= 'zip',
-                        root_dir= author,
-                        base_dir= packageName + "-" + version)
+    shutil.make_archive(base_name=packageName + "-" + version,
+                        format='zip',
+                        root_dir=author,
+                        base_dir=packageName + "-" + version)
 
     # Copy the package .zip onto its S3 location.
 
