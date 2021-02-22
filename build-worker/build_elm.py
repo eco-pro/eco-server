@@ -44,9 +44,13 @@ def report_error(seq, reason):
     """
     Send an error message to /packages/{seqNo}/error
     """
-    req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+    errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
              json={"errorReason": reason})
 
+    if errorResp.status_code == 500:
+        print("Server error whilst reporting error.")
+        print(errorResp.text)
+        quit()
 
 def report_compile_error(seq, version, errors):
     """
@@ -140,7 +144,7 @@ def compile_elm(author, packageName, version, workingDir=None):
         errorString = elmReportResult.stderr.decode('utf-8')
         errorJson = json.loads(errorString, strict=False)
 
-        keysToKeep = ['path', 'type', 'title', 'message']
+        keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key] for key in keysToKeep if key in errorJson}
 
         report_compile_error(seq, "0.19.1", errorJson)
