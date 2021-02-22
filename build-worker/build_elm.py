@@ -52,14 +52,15 @@ def report_error(seq, reason):
         print(errorResp.text)
         quit()
 
-def report_compile_error(seq, version, errors):
+def report_compile_error(seq, version, errors, compileLogUrl):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
     errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
                          json={"errorReason": "compile-failed",
                                "compilerVersion": version,
-                               "compileErrors": errors})
+                               "compileErrors": errors,
+                               "compileLogUrl": compileLogUrl})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting compile error.")
@@ -147,7 +148,7 @@ def compile_elm(author, packageName, version, workingDir=None):
         keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key] for key in keysToKeep if key in errorJson}
 
-        report_compile_error(seq, "0.19.1", errorJson)
+        report_compile_error(seq, "0.19.1", errorJson, "http://buildlogs.s3.log/" + log_file_name)
         return False
 
     print("Compiled Ok.")

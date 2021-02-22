@@ -602,7 +602,14 @@ saveLatestSeqNo timestamp seq responseFn conn =
         conn
 
 
-saveErrorSeqNo : Posix -> Int -> FQPackage -> SeqTable.ErrorReason -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveErrorSeqNo :
+    Posix
+    -> Int
+    -> FQPackage
+    -> SeqTable.ErrorReason
+    -> (Dynamo.PutResponse -> Msg)
+    -> Conn
+    -> ( Conn, Cmd Msg )
 saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
     Dynamo.updateKey
         (fqTableName "eco-elm-seq" conn)

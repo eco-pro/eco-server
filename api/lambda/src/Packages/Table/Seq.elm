@@ -33,7 +33,7 @@ type ErrorReason
     | ErrorElmJsonInvalid String
     | ErrorNotElmPackage
     | ErrorUnsupportedElmVersion
-    | ErrorCompileFailed Version Value
+    | ErrorCompileFailed Version Value Url
     | ErrorOther
 
 
@@ -121,7 +121,8 @@ encodeStatus status =
             ]
 
         Error { fqPackage, errorReason } ->
-            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
+            [ ( "fqPackage", FQPackage.encode fqPackage )
+            ]
                 ++ encodeErrorReason errorReason
 
 
@@ -145,10 +146,11 @@ encodeErrorReason reason =
         ErrorUnsupportedElmVersion ->
             [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
 
-        ErrorCompileFailed version compileErrors ->
+        ErrorCompileFailed version compileErrors compileLogUrl ->
             [ ( "errorReason", Encode.string "compile-failed" )
             , ( "compilerVersion", Elm.Version.encode version )
             , ( "compileErrors", compileErrors )
+            , ( "compileLogUrl", encodeUrl compileLogUrl )
             ]
 
         ErrorOther ->
@@ -178,11 +180,11 @@ statusDecoder =
 
                     "ready" ->
                         Decode.succeed
-                            (\fqp elmJson url md5 ->
+                            (\fqp elmJson packageUrl md5 ->
                                 Ready
                                     { fqPackage = fqp
                                     , elmJson = elmJson
-                                    , packageUrl = url
+                                    , packageUrl = packageUrl
                                     , md5 = md5
                                     }
                             )
@@ -233,6 +235,7 @@ errorReasonDecoder =
                             )
                             |> decodeAndMap (Decode.field "compilerVersion" Elm.Version.decoder)
                             |> decodeAndMap (Decode.field "compileErrors" Decode.value)
+                            |> decodeAndMap (Decode.field "compileLogUrl" decodeUrl)
 
                     _ ->
                         Decode.succeed ErrorOther
