@@ -11,6 +11,7 @@ import shutil
 import sys
 import time
 
+
 def zip_file_md5(archive):
     """
     Calculate the MD5 of the .zip file contents.
@@ -116,7 +117,8 @@ def compile_elm(author, packageName, version, workingDir=None):
     print("Compile with Elm 0.19.1")
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    log_file_name = timestr + "_" + author + "_" + packageName + "_" + version + "_compile_0.19.1.txt"
+    log_file_name = timestr + "_" + author + "_" + \
+        packageName + "_" + version + "_compile_0.19.1.txt"
 
     # Compile with human readable output logged.
     elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
@@ -128,23 +130,20 @@ def compile_elm(author, packageName, version, workingDir=None):
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
     # If compilation fails, run it again and get the JSON report.
+    # The JSON report is trimmed to a summary only, the compile log should
+    # be consulted for the full details.
     if elmResult.returncode != 0:
         elmReportResult = subprocess.run(
             ["elm", "make", "--docs=docs.json", "--report=json"],
             capture_output=True,
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
+        errorJson = json.loads(errorString, strict=False)
 
-        # If the error report is too big, report that as an error instead.
-        # The compilation log should be consulted instead.
-        if sys.getsizeof(errorString) > 4096:
-            errorJson = {'path': None,
-                         'type': 'error',
-                         'title': 'BUILD JSON REPORT TOO LARGE'}
-            report_compile_error(seq, "0.19.1", errorJson)
-        else:
-            errorJson = json.loads(errorString, strict=False)
-            report_compile_error(seq, "0.19.1", errorJson)
+        keysToKeep = ['path', 'type', 'title', 'message']
+        errorJson = {key: errorJson[key] for key in keysToKeep if key in errorJson}
+
+        report_compile_error(seq, "0.19.1", errorJson)
         return False
 
     print("Compiled Ok.")
