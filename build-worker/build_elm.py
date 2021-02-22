@@ -131,6 +131,8 @@ def compile_elm(workingDir=None):
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
 
+        # If the error report is too big, report that as an error instead.
+        # The compilation log should be consulted instead.
         if sys.getsizeof(errorString) > 4096:
             errorJson = {'path': null,
                          'type': 'error',
