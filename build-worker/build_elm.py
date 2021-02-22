@@ -9,7 +9,7 @@ import subprocess
 import pathlib
 import shutil
 import sys
-
+import time
 
 def zip_file_md5(archive):
     """
@@ -112,15 +112,19 @@ def is_elm_package_file(pathname):
         return False
 
 
-def compile_elm(workingDir=None):
+def compile_elm(author, packageName, version, workingDir=None):
     print("Compile with Elm 0.19.1")
+
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    log_file_name = timestr + "_" + author + "_" + packageName + "_" + version + "_compile_0.19.1.txt"
 
     # Compile with human readable output logged.
     elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
                                stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
                                cwd=workingDir)
-    with open("compile_log_elm_0.19.1.txt", "w") as compile_log:
+
+    with open(log_file_name, "w") as compile_log:
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
     # If compilation fails, run it again and get the JSON report.
@@ -210,11 +214,11 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm(workingDir) == False:
+                if compile_elm(author, packageName, version, workingDir) == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm(workingDir) == False:
+                if compile_elm(author, packageName, version, workingDir) == False:
                     continue
 
             else:
