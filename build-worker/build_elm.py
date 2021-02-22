@@ -8,6 +8,7 @@ import os
 import subprocess
 import pathlib
 import shutil
+import sys
 
 
 def zip_file_md5(archive):
@@ -50,10 +51,15 @@ def report_compile_error(seq, version, errors):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
-    req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-             json={"errorReason": "compile-failed",
-                   "compilerVersion": version,
-                   "compileErrors": errors})
+    errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+                         json={"errorReason": "compile-failed",
+                               "compilerVersion": version,
+                               "compileErrors": errors})
+
+    if errorResp.status_code == 500:
+        print("Server error whilst reporting compile error.")
+        print(errorResp.text)
+        quit()
 
 
 escaped_glob_tokens_to_re = dict((
@@ -104,6 +110,36 @@ def is_elm_package_file(pathname):
         return True
     else:
         return False
+
+
+def compile_elm():
+    print("Compile with Elm 0.19.1")
+    elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    with open("compile_log_elm_0.19.1.txt", "w") as compile_log:
+        compile_log.write(elmResult.stdout.decode('utf-8'))
+
+    if elmResult.returncode != 0:
+        elmReportResult = subprocess.run(
+            ["elm", "make", "--docs=docs.json", "--report=json"],
+            capture_output=True)
+        errorString = elmReportResult.stderr.decode('utf-8')
+
+        if sys.getsizeof(errorString) > 4096:
+            errorJson = {'path': null,
+                         'type': 'error',
+                         'title': 'BUILD JSON REPORT TOO LARGE'}
+            report_compile_error(seq, "0.19.1", errorJson)
+        else:
+            errorJson = json.loads(errorString, strict=False)
+            report_compile_error(seq, "0.19.1", errorJson)
+        return False
+
+    print("Compiled Ok.")
+    shutil.rmtree('elm-stuff')
+    os.remove("docs.json")
+
+    return True
 
 
 print("=== Eco-Server Elm Package Build Script ===")
@@ -170,30 +206,12 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                print("Compile with Elm 0.19.0")
-                elmResult = subprocess.run(
-                    ["elm19", "make", "--docs=docs.json", "--report=json"],
-                    capture_output=True)
-
-                if elmResult.returncode != 0:
-                    report_compile_error(seq, "0.19.0", elmResult.stderr.decode('ascii'))
+                if compile_elm() == False:
                     continue
-
-                print("Compiled Ok.")
-                shutil.rmtree("elm-stuff")
-                os.remove("docs.json")
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                print("Compile with Elm 0.19.1")
-                elmResult = subprocess.run(["elm", "make", "--docs=docs.json", "--report=json"])
-
-                if elmResult.returncode != 0:
-                    report_compile_error(seq, "0.19.1", elmResult.stderr.decode('ascii'))
+                if compile_elm() == False:
                     continue
-
-                print("Compiled Ok.")
-                shutil.rmtree('elm-stuff')
-                os.remove("docs.json")
 
             else:
                 print("== Error: Unsupported Elm version.")
