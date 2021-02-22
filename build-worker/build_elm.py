@@ -112,17 +112,23 @@ def is_elm_package_file(pathname):
         return False
 
 
-def compile_elm():
+def compile_elm(workingDir=None):
     print("Compile with Elm 0.19.1")
+
+    # Compile with human readable output logged.
     elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT,
+                               cwd=workingDir)
     with open("compile_log_elm_0.19.1.txt", "w") as compile_log:
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
+    # If compilation fails, run it again and get the JSON report.
     if elmResult.returncode != 0:
         elmReportResult = subprocess.run(
             ["elm", "make", "--docs=docs.json", "--report=json"],
-            capture_output=True)
+            capture_output=True,
+            cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
 
         if sys.getsizeof(errorString) > 4096:
@@ -136,8 +142,8 @@ def compile_elm():
         return False
 
     print("Compiled Ok.")
-    shutil.rmtree('elm-stuff')
-    os.remove("docs.json")
+    shutil.rmtree(workingDir + "/elm-stuff")
+    os.remove(workingDir + "/docs.json")
 
     return True
 
@@ -193,24 +199,24 @@ while True:
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
-    try:
-        os.chdir(author + "/" + packageName + "-" + version)
-    except FileNotFoundError:
-        report_error(seq, "package-renamed")
-        continue
+    # try:
+    #     os.chdir(author + "/" + packageName + "-" + version)
+    # except FileNotFoundError:
+    #     report_error(seq, "package-renamed")
+    #     continue
 
     try:
-        with open("elm.json") as json_file:
+        with open(author + "/" + packageName + "-" + version + "/elm.json") as json_file:
             data = json.load(json_file)
 
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm() == False:
+                if compile_elm(author + "/" + packageName + "-" + version) == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm() == False:
+                if compile_elm(author + "/" + packageName + "-" + version) == False:
                     continue
 
             else:
@@ -225,7 +231,7 @@ while True:
         report_error(seq, "not-elm-package")
         continue
 
-    os.chdir(start_dir)
+    # os.chdir(start_dir)
 
     # Build a .zip of the minimized package.
     print("Building the canonical Elm package as a .zip file.")
