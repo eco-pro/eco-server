@@ -134,7 +134,7 @@ def compile_elm(workingDir=None):
         # If the error report is too big, report that as an error instead.
         # The compilation log should be consulted instead.
         if sys.getsizeof(errorString) > 4096:
-            errorJson = {'path': null,
+            errorJson = {'path': None,
                          'type': 'error',
                          'title': 'BUILD JSON REPORT TOO LARGE'}
             report_compile_error(seq, "0.19.1", errorJson)
@@ -201,24 +201,20 @@ while True:
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
-    # try:
-    #     os.chdir(author + "/" + packageName + "-" + version)
-    # except FileNotFoundError:
-    #     report_error(seq, "package-renamed")
-    #     continue
+    workingDir = author + "/" + packageName + "-" + version
 
     try:
-        with open(author + "/" + packageName + "-" + version + "/elm.json") as json_file:
+        with open(workingDir + "/elm.json") as json_file:
             data = json.load(json_file)
 
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm(author + "/" + packageName + "-" + version) == False:
+                if compile_elm(workingDir) == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm(author + "/" + packageName + "-" + version) == False:
+                if compile_elm(workingDir) == False:
                     continue
 
             else:
@@ -232,8 +228,6 @@ while True:
         print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
         report_error(seq, "not-elm-package")
         continue
-
-    # os.chdir(start_dir)
 
     # Build a .zip of the minimized package.
     print("Building the canonical Elm package as a .zip file.")
