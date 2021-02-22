@@ -506,7 +506,7 @@ updateAsReady seq record conn =
                                     saveErrorSeqNo posix
                                         seq
                                         fqPackage
-                                        decodeErrMsg
+                                        (SeqTable.ErrorElmJsonInvalid decodeErrMsg)
                                         (SavedSeqNoState seq)
                                         conn
                                 )
@@ -524,14 +524,15 @@ updateAsError seq record conn =
             Conn.request conn
                 |> Request.body
                 |> Body.asJson
+                |> Result.mapError (always SeqTable.ErrorOther)
                 |> Result.andThen
                     (\val ->
-                        Decode.decodeValue (Decode.field "errorMsg" Decode.string) val
-                            |> Result.mapError Decode.errorToString
+                        Decode.decodeValue SeqTable.errorReasonDecoder val
+                            |> Result.mapError (always SeqTable.ErrorOther)
                     )
     in
     case errorMsgResult of
-        Ok errorMsg ->
+        Ok errorReason ->
             case record.status of
                 SeqTable.NewFromRootSite { fqPackage } ->
                     ( conn
@@ -542,7 +543,7 @@ updateAsError seq record conn =
                                     saveErrorSeqNo posix
                                         seq
                                         fqPackage
-                                        errorMsg
+                                        errorReason
                                         (SavedSeqNoState seq)
                                         conn
                                 )
@@ -553,7 +554,7 @@ updateAsError seq record conn =
                     error "Item with seq not found in correct state." conn
 
         Err decodeErrMsg ->
-            error decodeErrMsg conn
+            jsonError (SeqTable.encodeErrorReason decodeErrMsg |> Encode.object) conn
 
 
 saveAllPackages :
@@ -601,8 +602,8 @@ saveLatestSeqNo timestamp seq responseFn conn =
         conn
 
 
-saveErrorSeqNo : Posix -> Int -> FQPackage -> String -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveErrorSeqNo timestamp seq fqPackage errorMsg responseFn conn =
+saveErrorSeqNo : Posix -> Int -> FQPackage -> SeqTable.ErrorReason -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
+saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
     Dynamo.updateKey
         (fqTableName "eco-elm-seq" conn)
         SeqTable.encodeKey
@@ -612,7 +613,11 @@ saveErrorSeqNo timestamp seq fqPackage errorMsg responseFn conn =
         }
         { seq = seq
         , updatedAt = timestamp
-        , status = SeqTable.Error { fqPackage = fqPackage, errorMsg = errorMsg }
+        , status =
+            SeqTable.Error
+                { fqPackage = fqPackage
+                , errorReason = errorReason
+                }
         }
         responseFn
         conn
@@ -705,6 +710,11 @@ createdOk conn =
 error : String -> Conn -> ( Conn, Cmd Msg )
 error msg conn =
     respond ( 500, Body.text msg ) conn
+
+
+jsonError : Value -> Conn -> ( Conn, Cmd Msg )
+jsonError json conn =
+    respond ( 500, Body.json json ) conn
 
 
 
