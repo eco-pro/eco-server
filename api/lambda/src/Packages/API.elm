@@ -447,7 +447,7 @@ withDynamoGet recordFn getResponse conn =
             recordFn record conn
 
         Dynamo.GetItemNotFound ->
-            error "Item not found." conn
+            respond ( 404, Body.text "Item not found." ) conn
 
         Dynamo.GetError dbErrorMsg ->
             error dbErrorMsg conn
