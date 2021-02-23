@@ -45,14 +45,15 @@ def report_error(seq, reason):
     Send an error message to /packages/{seqNo}/error
     """
     errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
-             json={"errorReason": reason})
+                         json={"errorReason": reason})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting error.")
         print(errorResp.text)
         quit()
 
-def report_compile_error(seq, version, errors, compileLogUrl):
+
+def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
@@ -60,7 +61,8 @@ def report_compile_error(seq, version, errors, compileLogUrl):
                          json={"errorReason": "compile-failed",
                                "compilerVersion": version,
                                "compileErrors": errors,
-                               "compileLogUrl": compileLogUrl})
+                               "compileLogUrl": compileLogUrl,
+                               "jsonReportUrl": jsonReportUrl})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting compile error.")
@@ -124,6 +126,8 @@ def compile_elm(author, packageName, version, workingDir=None):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     log_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.txt"
+    json_report_file_name = timestr + "_" + author + "_" + \
+        packageName + "_" + version + "_compile_0.19.1.json"
 
     # Compile with human readable output logged.
     elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
@@ -139,16 +143,22 @@ def compile_elm(author, packageName, version, workingDir=None):
     # be consulted for the full details.
     if elmResult.returncode != 0:
         elmReportResult = subprocess.run(
-            ["elm", "make", "--docs=docs.json", "--report=json"],
+            ["elm", "make", "--report=json"],
             capture_output=True,
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
         errorJson = json.loads(errorString, strict=False)
 
-        keysToKeep = ['path', 'type', 'title']
-        errorJson = {key: errorJson[key] for key in keysToKeep if key in errorJson}
+        with open(json_report_file_name, "w") as json_report:
+            json_report.write(errorString)
 
-        report_compile_error(seq, "0.19.1", errorJson, "http://buildlogs.s3.log/" + log_file_name)
+        keysToKeep = ['path', 'type', 'title']
+        errorJson = {key: errorJson[key]
+                     for key in keysToKeep if key in errorJson}
+
+        report_compile_error(seq, "0.19.1", errorJson,
+                             "http://buildlogs.s3.log/" + log_file_name,
+                             "http://buildlogs.s3.log/" + json_report_file_name)
         return False
 
     print("Compiled Ok.")
