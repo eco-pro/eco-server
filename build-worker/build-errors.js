@@ -1,5 +1,5 @@
 var params = {
-    TableName: 'dev-eco-elm-seq',
+    TableName: 'dev-eco-buildstatus',
     KeyConditionExpression: 'label = :label',
     ExpressionAttributeValues: {
       ':label': 'error'
