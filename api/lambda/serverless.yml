@@ -50,7 +50,7 @@ resources:
       Properties:
         BucketName: elm-packages
 
-    ElmSeqDynamoDBTable:
+    BuildStatusTable:
       Type: 'AWS::DynamoDB::Table'
       DeletionPolicy: Delete
       Properties:
@@ -69,21 +69,36 @@ resources:
           WriteCapacityUnits: 1
         TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
 
-    ElmPackagesDynamoDBTable:
+    MarkersTable:
       Type: 'AWS::DynamoDB::Table'
       DeletionPolicy: Delete
       Properties:
         AttributeDefinitions:
-          - AttributeName: name
-            AttributeType: S
-          - AttributeName: version
+          - AttributeName: label
             AttributeType: S
         KeySchema:
-          - AttributeName: name
+          - AttributeName: label
             KeyType: HASH
-          - AttributeName: version
-            KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-packages
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
+
+    # ElmPackagesDynamoDBTable:
+    #   Type: 'AWS::DynamoDB::Table'
+    #   DeletionPolicy: Delete
+    #   Properties:
+    #     AttributeDefinitions:
+    #       - AttributeName: name
+    #         AttributeType: S
+    #       - AttributeName: version
+    #         AttributeType: S
+    #     KeySchema:
+    #       - AttributeName: name
+    #         KeyType: HASH
+    #       - AttributeName: version
+    #         KeyType: RANGE
+    #     ProvisionedThroughput:
+    #       ReadCapacityUnits: 1
+    #       WriteCapacityUnits: 1
+    #     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-packages
