@@ -22,6 +22,7 @@ plugins:
   - serverless-webpack
   - serverless-offline
   - serverless-dynamodb-local
+  - serverless-s3-local
 
 custom:
   serverless-offline:
@@ -29,6 +30,9 @@ custom:
   dynamodb:
     stages:
       - dev
+  s3:
+    host: localhost
+    directory: /tmp
 
 functions:
   packages:
@@ -41,6 +45,10 @@ functions:
 
 resources:
   Resources:
+    NewResource:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: elm-packages
 
     ElmSeqDynamoDBTable:
       Type: 'AWS::DynamoDB::Table'
