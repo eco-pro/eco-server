@@ -457,30 +457,7 @@ jsonError json conn =
 
 updateAsReady : Int -> StatusTable.Record -> Conn -> ( Conn, Cmd Msg )
 updateAsReady seq record conn =
-    let
-        bodyDecoder =
-            Decode.succeed
-                (\elmJson packageUrl md5 ->
-                    { elmJson = elmJson
-                    , packageUrl = packageUrl
-                    , md5 = md5
-                    }
-                )
-                |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
-                |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
-                |> decodeAndMap (Decode.field "md5" Decode.string)
-
-        elmJsonResult =
-            Conn.request conn
-                |> Request.body
-                |> Body.asJson
-                |> Result.andThen
-                    (\val ->
-                        Decode.decodeValue bodyDecoder val
-                            |> Result.mapError Decode.errorToString
-                    )
-    in
-    case elmJsonResult of
+    case decodeJsonBody successReportDecoder conn of
         Ok { elmJson, packageUrl, md5 } ->
             case record.status of
                 StatusTable.NewFromRootSite { fqPackage } ->
@@ -524,15 +501,8 @@ updateAsError : Int -> StatusTable.Record -> Conn -> ( Conn, Cmd Msg )
 updateAsError seq record conn =
     let
         errorMsgResult =
-            Conn.request conn
-                |> Request.body
-                |> Body.asJson
+            decodeJsonBody errorReportDecoder conn
                 |> Result.mapError (always StatusTable.ErrorOther)
-                |> Result.andThen
-                    (\val ->
-                        Decode.decodeValue StatusTable.errorReasonDecoder val
-                            |> Result.mapError (always StatusTable.ErrorOther)
-                    )
     in
     case errorMsgResult of
         Ok errorReason ->
@@ -584,17 +554,35 @@ encodeBuildJob val =
 
 
 
--- DynamoDB Tables
+-- Success Report
 
 
-fqTableName : String -> Conn -> String
-fqTableName name conn =
-    (Conn.config conn).dynamoDbNamespace ++ "-" ++ name
+type alias SuccessReport =
+    { elmJson : Elm.Project.Project
+    , packageUrl : Url
+    , md5 : String
+    }
 
 
-ecoBuildStatusTableName : Conn -> String
-ecoBuildStatusTableName conn =
-    fqTableName "eco-buildstatus" conn
+successReportDecoder : Decoder SuccessReport
+successReportDecoder =
+    Decode.succeed SuccessReport
+        |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
+        |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
+        |> decodeAndMap (Decode.field "md5" Decode.string)
+
+
+
+-- Error Report
+
+
+type alias ErrorReport =
+    StatusTable.ErrorReason
+
+
+errorReportDecoder : Decoder ErrorReport
+errorReportDecoder =
+    StatusTable.errorReasonDecoder
 
 
 
@@ -618,4 +606,16 @@ decodeUrl =
 
                     Just val ->
                         Decode.succeed val
+            )
+
+
+decodeJsonBody : Decoder a -> Conn.Conn config model route msg -> Result String a
+decodeJsonBody decoder conn =
+    Conn.request conn
+        |> Request.body
+        |> Body.asJson
+        |> Result.andThen
+            (\val ->
+                Decode.decodeValue decoder val
+                    |> Result.mapError Decode.errorToString
             )
