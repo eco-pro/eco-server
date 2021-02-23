@@ -1,6 +1,7 @@
 port module Packages.API exposing (main)
 
 import AWS.Dynamo as Dynamo
+import DB.BuildStatus.Queries as StatusQueries
 import DB.BuildStatus.Table as StatusTable
 import DB.Markers.Table as MarkersTable
 import DB.RootSiteImports.Table as RootSiteImportsTable
@@ -13,6 +14,7 @@ import Http.RootSite as RootSite
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
+import Packages.Config as Config exposing (Config)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Parser exposing (Parser)
 import Serverless
@@ -47,7 +49,7 @@ type alias Conn =
 main : Serverless.Program Config () Route Msg
 main =
     Serverless.httpApi
-        { configDecoder = configDecoder
+        { configDecoder = Config.configDecoder
         , initialModel = ()
         , parseRoute = routeParser
         , endpoint = router
@@ -56,21 +58,6 @@ main =
         , requestPort = requestPort
         , responsePort = responsePort
         }
-
-
-
--- Configuration
-
-
-type alias Config =
-    { dynamoDbNamespace : String
-    }
-
-
-configDecoder : Decoder Config
-configDecoder =
-    Decode.field "DYNAMODB_NAMESPACE" Decode.string
-        |> Decode.map Config
 
 
 
@@ -121,11 +108,11 @@ router conn =
         -- The original package site API
         ( GET, AllPackages ) ->
             ( conn, Cmd.none )
-                |> andThen (loadPackagesSince 0 AllPackagesLoaded)
+                |> andThen (StatusQueries.loadPackagesSince 0 AllPackagesLoaded)
 
         ( POST, AllPackagesSince since ) ->
             ( conn, Cmd.none )
-                |> andThen (loadPackagesSince since PackagesSinceLoaded)
+                |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, ElmJson author name version ) ->
             ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
@@ -136,19 +123,19 @@ router conn =
         -- The enhanced API
         ( GET, AllPackagesSince since ) ->
             ( conn, Cmd.none )
-                |> andThen (loadPackagesSince since PackagesSinceLoaded)
+                |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, Refresh ) ->
-            getLatestSeqNo CheckSeqNo conn
+            StatusQueries.getLatestSeqNo CheckSeqNo conn
 
         ( GET, NextJob ) ->
-            getLowestNewSeqNo ProvideJobDetails conn
+            StatusQueries.getLowestNewSeqNo ProvideJobDetails conn
 
         ( POST, PackageError seq ) ->
-            getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
+            StatusQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
 
         ( POST, PackageReady seq ) ->
-            getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
+            StatusQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -290,10 +277,11 @@ update msg conn =
                             in
                             ( conn, Cmd.none )
                                 |> andThen
-                                    (saveAllPackages
+                                    (StatusQueries.saveAllPackages
                                         timestamp
                                         packageTableEntries
                                         (PackagesSave seq timestamp)
+                                        DynamoMsg
                                     )
 
                 Err err ->
@@ -303,7 +291,7 @@ update msg conn =
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (saveLatestSeqNo timestamp seq (SavedSeqNoState seq))
+                        |> andThen (StatusQueries.saveLatestSeqNo timestamp seq (SavedSeqNoState seq))
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -499,7 +487,7 @@ updateAsReady seq record conn =
                     ( conn
                     , withTimestamp
                         (\posix ->
-                            saveReadySeqNo posix
+                            StatusQueries.saveReadySeqNo posix
                                 seq
                                 fqPackage
                                 elmJson
@@ -519,7 +507,7 @@ updateAsReady seq record conn =
                     ( conn
                     , withTimestamp
                         (\posix ->
-                            saveErrorSeqNo posix
+                            StatusQueries.saveErrorSeqNo posix
                                 seq
                                 fqPackage
                                 (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
@@ -553,7 +541,7 @@ updateAsError seq record conn =
                     ( conn
                     , withTimestamp
                         (\posix ->
-                            saveErrorSeqNo posix
+                            StatusQueries.saveErrorSeqNo posix
                                 seq
                                 fqPackage
                                 errorReason
@@ -567,158 +555,6 @@ updateAsError seq record conn =
 
         Err decodeErrMsg ->
             jsonError (StatusTable.encodeErrorReason decodeErrMsg |> Encode.object) conn
-
-
-saveAllPackages :
-    Posix
-    -> List StatusTable.Record
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveAllPackages timestamp packages responseFn conn =
-    Dynamo.batchPut
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
-        packages
-        DynamoMsg
-        responseFn
-        conn
-
-
-getLatestSeqNo : (Dynamo.QueryResponse StatusTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getLatestSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "latest"
-                |> Dynamo.orderResults Dynamo.Reverse
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
-
-
-saveLatestSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveLatestSeqNo timestamp seq responseFn conn =
-    Dynamo.put
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
-        { seq = seq
-        , updatedAt = timestamp
-        , status = StatusTable.Latest
-        }
-        responseFn
-        conn
-
-
-saveErrorSeqNo :
-    Posix
-    -> Int
-    -> FQPackage
-    -> StatusTable.ErrorReason
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
-    Dynamo.updateKey
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        StatusTable.encode
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
-        { seq = seq
-        , updatedAt = timestamp
-        , status =
-            StatusTable.Error
-                { fqPackage = fqPackage
-                , errorReason = errorReason
-                }
-        }
-        responseFn
-        conn
-
-
-saveReadySeqNo :
-    Posix
-    -> Int
-    -> FQPackage
-    -> Elm.Project.Project
-    -> Url
-    -> String
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveReadySeqNo timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
-    Dynamo.updateKey
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        StatusTable.encode
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
-        { seq = seq
-        , updatedAt = timestamp
-        , status =
-            StatusTable.Ready
-                { fqPackage = fqPackage
-                , elmJson = elmJson
-                , packageUrl = packageUrl
-                , md5 = md5
-                }
-        }
-        responseFn
-        conn
-
-
-getLowestNewSeqNo : (Dynamo.QueryResponse StatusTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getLowestNewSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
-
-
-getNewSeqNo : Int -> (Dynamo.GetResponse StatusTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getNewSeqNo seq responseFn conn =
-    Dynamo.get
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
-        StatusTable.decoder
-        responseFn
-        conn
-
-
-loadPackagesSince :
-    Int
-    -> (Dynamo.QueryResponse StatusTable.Record -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-loadPackagesSince seq responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
 
 
 
