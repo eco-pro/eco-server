@@ -273,7 +273,7 @@ update msg conn =
                                             (\idx fqPackage ->
                                                 { seq = from + idx + 1
                                                 , updatedAt = timestamp
-                                                , status = StatusTable.NewFromRootSite { fqPackage = fqPackage }
+                                                , fqPackage = fqPackage
                                                 }
                                             )
                             in
