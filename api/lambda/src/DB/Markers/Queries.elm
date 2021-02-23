@@ -18,9 +18,9 @@ import Time exposing (Posix)
 import Url exposing (Url)
 
 
-ecoBuildStatusTableName : Conn Config model route msg -> String
-ecoBuildStatusTableName conn =
-    TableNames.fqTableName "eco-buildstatus" conn
+ecoMarkersTableName : Conn Config model route msg -> String
+ecoMarkersTableName conn =
+    TableNames.fqTableName "eco-markers" conn
 
 
 get :
@@ -30,7 +30,7 @@ get :
     -> ( Conn Config model route msg, Cmd msg )
 get label responseFn conn =
     Dynamo.get
-        (ecoBuildStatusTableName conn)
+        (ecoMarkersTableName conn)
         MarkersTable.encodeKey
         { label = label }
         MarkersTable.decoder
@@ -45,7 +45,7 @@ save :
     -> ( Conn Config model route msg, Cmd msg )
 save record responseFn conn =
     Dynamo.put
-        (ecoBuildStatusTableName conn)
+        (ecoMarkersTableName conn)
         MarkersTable.encode
         record
         responseFn
