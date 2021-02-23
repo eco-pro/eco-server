@@ -1,19 +1,19 @@
 port module Packages.API exposing (main)
 
+import AWS.Dynamo as Dynamo
+import DB.BuildStatus.Table as StatusTable
+import DB.Markers.Table as MarkersTable
+import DB.RootSiteImports.Table as RootSiteImportsTable
 import Dict exposing (Dict)
 import Elm.Package
 import Elm.Project
 import Elm.Version
 import Http
+import Http.RootSite as RootSite
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
-import Packages.Dynamo as Dynamo
 import Packages.FQPackage as FQPackage exposing (FQPackage)
-import Packages.RootSite as RootSite
-import Packages.Table.BuildStatus as StatusTable
-import Packages.Table.Markers as MarkersTable
-import Packages.Table.RootSiteImports as RootSiteImportsTable
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
@@ -447,6 +447,26 @@ andThen fn ( model, cmd ) =
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
 
 
+withTimestamp : (Posix -> ( Conn, Cmd Msg )) -> Cmd Msg
+withTimestamp fn =
+    Time.now |> Task.perform (TimestampAndThen fn)
+
+
+createdOk : Conn -> ( Conn, Cmd Msg )
+createdOk conn =
+    respond ( 201, Body.empty ) conn
+
+
+error : String -> Conn -> ( Conn, Cmd Msg )
+error msg conn =
+    respond ( 500, Body.text msg ) conn
+
+
+jsonError : Value -> Conn -> ( Conn, Cmd Msg )
+jsonError json conn =
+    respond ( 500, Body.json json ) conn
+
+
 updateAsReady : Int -> StatusTable.Record -> Conn -> ( Conn, Cmd Msg )
 updateAsReady seq record conn =
     let
@@ -477,20 +497,17 @@ updateAsReady seq record conn =
             case record.status of
                 StatusTable.NewFromRootSite { fqPackage } ->
                     ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveReadySeqNo posix
-                                        seq
-                                        fqPackage
-                                        elmJson
-                                        packageUrl
-                                        md5
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
+                    , withTimestamp
+                        (\posix ->
+                            saveReadySeqNo posix
+                                seq
+                                fqPackage
+                                elmJson
+                                packageUrl
+                                md5
+                                (SavedSeqNoState seq)
+                                conn
+                        )
                     )
 
                 _ ->
@@ -500,18 +517,15 @@ updateAsReady seq record conn =
             case record.status of
                 StatusTable.NewFromRootSite { fqPackage } ->
                     ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveErrorSeqNo posix
-                                        seq
-                                        fqPackage
-                                        (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
+                    , withTimestamp
+                        (\posix ->
+                            saveErrorSeqNo posix
+                                seq
+                                fqPackage
+                                (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
+                                (SavedSeqNoState seq)
+                                conn
+                        )
                     )
 
                 _ ->
@@ -537,18 +551,15 @@ updateAsError seq record conn =
             case record.status of
                 StatusTable.NewFromRootSite { fqPackage } ->
                     ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveErrorSeqNo posix
-                                        seq
-                                        fqPackage
-                                        errorReason
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
+                    , withTimestamp
+                        (\posix ->
+                            saveErrorSeqNo posix
+                                seq
+                                fqPackage
+                                errorReason
+                                (SavedSeqNoState seq)
+                                conn
+                        )
                     )
 
                 _ ->
@@ -708,21 +719,6 @@ loadPackagesSince seq responseFn conn =
         StatusTable.decoder
         responseFn
         conn
-
-
-createdOk : Conn -> ( Conn, Cmd Msg )
-createdOk conn =
-    respond ( 201, Body.empty ) conn
-
-
-error : String -> Conn -> ( Conn, Cmd Msg )
-error msg conn =
-    respond ( 500, Body.text msg ) conn
-
-
-jsonError : Value -> Conn -> ( Conn, Cmd Msg )
-jsonError json conn =
-    respond ( 500, Body.json json ) conn
 
 
 

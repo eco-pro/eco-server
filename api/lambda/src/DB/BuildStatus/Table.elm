@@ -1,4 +1,4 @@
-module Packages.Table.BuildStatus exposing
+module DB.BuildStatus.Table exposing
     ( ErrorReason(..)
     , Key
     , Label(..)

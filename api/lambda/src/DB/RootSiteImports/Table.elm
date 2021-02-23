@@ -1,30 +1,34 @@
-module Packages.Table.Packages exposing (..)
+module DB.RootSiteImports.Table exposing
+    ( Key
+    , Record
+    , decoder
+    , encode
+    , encodeKey
+    )
 
-import Elm.Package
-import Elm.Version
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Time exposing (Posix)
 
 
 type alias Record =
-    { name : Elm.Package.Name
-    , version : Elm.Version.Version
+    { seq : Int
     , updatedAt : Posix
+    , fqPackage : FQPackage
     }
 
 
 type alias Key =
-    { name : Elm.Package.Name
-    , version : Elm.Version.Version
+    { seq : Int
     }
 
 
 encode : Record -> Value
 encode record =
     Encode.object
-        [ ( "name", Elm.Package.encode record.name )
-        , ( "version", Elm.Version.encode record.version )
+        [ ( "seq", Encode.int record.seq )
+        , ( "fqPackage", FQPackage.encode record.fqPackage )
         , ( "updatedAt", Encode.int (Time.posixToMillis record.updatedAt) )
         ]
 
@@ -32,17 +36,15 @@ encode record =
 decoder : Decoder Record
 decoder =
     Decode.succeed Record
-        |> decodeAndMap (Decode.field "name" Elm.Package.decoder)
-        |> decodeAndMap (Decode.field "version" Elm.Version.decoder)
+        |> decodeAndMap (Decode.field "seq" Decode.int)
         |> decodeAndMap (Decode.field "updatedAt" (Decode.map Time.millisToPosix Decode.int))
+        |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
 
 
 encodeKey : Key -> Value
-encodeKey record =
+encodeKey key =
     Encode.object
-        [ ( "name", Elm.Package.encode record.name )
-        , ( "version", Elm.Version.encode record.version )
-        ]
+        [ ( "seq", Encode.int key.seq ) ]
 
 
 

@@ -1,4 +1,4 @@
-port module Packages.Dynamo exposing
+port module AWS.Dynamo exposing
     ( Msg, update
     , put, PutResponse(..)
     , get, GetResponse(..)

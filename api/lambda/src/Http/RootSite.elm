@@ -1,4 +1,4 @@
-module Packages.RootSite exposing
+module Http.RootSite exposing
     ( fetchAllPackages
     , fetchAllPackagesSince
     , fetchElmJson

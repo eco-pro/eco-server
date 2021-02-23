@@ -1,4 +1,4 @@
-module Packages.Table.Markers exposing
+module DB.Markers.Table exposing
     ( Key
     , Label(..)
     , Record
