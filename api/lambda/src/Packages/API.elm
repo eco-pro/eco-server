@@ -3,7 +3,9 @@ port module Packages.API exposing (main)
 import AWS.Dynamo as Dynamo
 import DB.BuildStatus.Queries as StatusQueries
 import DB.BuildStatus.Table as StatusTable
+import DB.Markers.Queries as MarkersQueries
 import DB.Markers.Table as MarkersTable
+import DB.RootSiteImports.Queries as RootSiteImportsQueries
 import DB.RootSiteImports.Table as RootSiteImportsTable
 import Dict exposing (Dict)
 import Elm.Package
@@ -126,16 +128,16 @@ router conn =
                 |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, Refresh ) ->
-            StatusQueries.getLatestSeqNo CheckSeqNo conn
+            MarkersQueries.getLatestSeqNo CheckSeqNo conn
 
         ( GET, NextJob ) ->
-            StatusQueries.getLowestNewSeqNo ProvideJobDetails conn
+            MarkersQueries.getLowestNewSeqNo ProvideJobDetails conn
 
         ( POST, PackageError seq ) ->
-            StatusQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
+            MarkersQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
 
         ( POST, PackageReady seq ) ->
-            StatusQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
+            MarkersQueries.getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -277,7 +279,7 @@ update msg conn =
                             in
                             ( conn, Cmd.none )
                                 |> andThen
-                                    (StatusQueries.saveAllPackages
+                                    (RootSiteImportsQueries.saveAllPackages
                                         timestamp
                                         packageTableEntries
                                         (PackagesSave seq timestamp)
@@ -291,7 +293,7 @@ update msg conn =
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (StatusQueries.saveLatestSeqNo timestamp seq (SavedSeqNoState seq))
+                        |> andThen (MarkersQueries.saveLatestSeqNo timestamp seq (SavedSeqNoState seq))
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn

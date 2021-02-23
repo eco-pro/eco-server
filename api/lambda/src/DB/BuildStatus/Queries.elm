@@ -1,4 +1,8 @@
-module DB.BuildStatus.Queries exposing (..)
+module DB.BuildStatus.Queries exposing
+    ( loadPackagesSince
+    , saveErrorSeqNo
+    , saveReadySeqNo
+    )
 
 import AWS.Dynamo as Dynamo
 import DB.BuildStatus.Table as StatusTable
@@ -18,52 +22,6 @@ fqTableName name conn =
 ecoBuildStatusTableName : Conn Config model route msg -> String
 ecoBuildStatusTableName conn =
     fqTableName "eco-buildstatus" conn
-
-
-saveAllPackages :
-    Posix
-    -> List StatusTable.Record
-    -> (Dynamo.PutResponse -> msg)
-    -> (Dynamo.Msg msg -> msg)
-    -> Conn Config model route msg
-    -> ( Conn Config model route msg, Cmd msg )
-saveAllPackages timestamp packages responseFn dynamoMsgFn conn =
-    Dynamo.batchPut
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
-        packages
-        dynamoMsgFn
-        responseFn
-        conn
-
-
-getLatestSeqNo : (Dynamo.QueryResponse StatusTable.Record -> msg) -> Conn Config model route msg -> ( Conn Config model route msg, Cmd msg )
-getLatestSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "latest"
-                |> Dynamo.orderResults Dynamo.Reverse
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
-
-
-saveLatestSeqNo : Posix -> Int -> (Dynamo.PutResponse -> msg) -> Conn Config model route msg -> ( Conn Config model route msg, Cmd msg )
-saveLatestSeqNo timestamp seq responseFn conn =
-    Dynamo.put
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
-        { seq = seq
-        , updatedAt = timestamp
-        , status = StatusTable.Latest
-        }
-        responseFn
-        conn
 
 
 saveErrorSeqNo :
@@ -122,34 +80,6 @@ saveReadySeqNo timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
                 , md5 = md5
                 }
         }
-        responseFn
-        conn
-
-
-getLowestNewSeqNo : (Dynamo.QueryResponse StatusTable.Record -> msg) -> Conn Config model route msg -> ( Conn Config model route msg, Cmd msg )
-getLowestNewSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
-
-
-getNewSeqNo : Int -> (Dynamo.GetResponse StatusTable.Record -> msg) -> Conn Config model route msg -> ( Conn Config model route msg, Cmd msg )
-getNewSeqNo seq responseFn conn =
-    Dynamo.get
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
-        StatusTable.decoder
         responseFn
         conn
 
