@@ -13,6 +13,7 @@ import Packages.FQPackage as FQPackage exposing (FQPackage)
 import Packages.RootSite as RootSite
 import Packages.Table.BuildStatus as StatusTable
 import Packages.Table.Markers as MarkersTable
+import Packages.Table.RootSiteImports as RootSiteImportsTable
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
