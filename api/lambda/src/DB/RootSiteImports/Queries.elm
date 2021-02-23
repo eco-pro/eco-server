@@ -1,7 +1,7 @@
 module DB.RootSiteImports.Queries exposing (saveAllPackages)
 
 import AWS.Dynamo as Dynamo
-import DB.BuildStatus.Table as StatusTable
+import DB.RootSiteImports.Table as RootSiteImportsTable
 import DB.TableNames as TableNames
 import Elm.Project
 import Packages.Config exposing (Config)
@@ -11,9 +11,9 @@ import Time exposing (Posix)
 import Url exposing (Url)
 
 
-ecoBuildStatusTableName : Conn Config model route msg -> String
-ecoBuildStatusTableName conn =
-    TableNames.fqTableName "eco-buildstatus" conn
+rootSiteImportsTableName : Conn Config model route msg -> String
+rootSiteImportsTableName conn =
+    TableNames.fqTableName "eco-rootsiteimports" conn
 
 
 
@@ -22,15 +22,15 @@ ecoBuildStatusTableName conn =
 
 saveAllPackages :
     Posix
-    -> List StatusTable.Record
+    -> List RootSiteImportsTable.Record
     -> (Dynamo.PutResponse -> msg)
     -> (Dynamo.Msg msg -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
 saveAllPackages timestamp packages responseFn dynamoMsgFn conn =
     Dynamo.batchPut
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
+        (rootSiteImportsTableName conn)
+        RootSiteImportsTable.encode
         packages
         dynamoMsgFn
         responseFn
