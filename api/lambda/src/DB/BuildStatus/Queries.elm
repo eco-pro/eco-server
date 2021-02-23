@@ -1,7 +1,7 @@
 module DB.BuildStatus.Queries exposing
     ( loadPackagesSince
-    , saveErrorSeqNo
-    , saveReadySeqNo
+    , saveError
+    , saveReady
     )
 
 import AWS.Dynamo as Dynamo
@@ -20,7 +20,7 @@ ecoBuildStatusTableName conn =
     TableNames.fqTableName "eco-buildstatus" conn
 
 
-saveErrorSeqNo :
+saveError :
     Posix
     -> Int
     -> FQPackage
@@ -28,14 +28,8 @@ saveErrorSeqNo :
     -> (Dynamo.PutResponse -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
-    Dynamo.updateKey
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        StatusTable.encode
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
+saveError timestamp seq fqPackage errorReason responseFn conn =
+    save
         { seq = seq
         , updatedAt = timestamp
         , status =
@@ -48,7 +42,7 @@ saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
         conn
 
 
-saveReadySeqNo :
+saveReady :
     Posix
     -> Int
     -> FQPackage
@@ -58,14 +52,8 @@ saveReadySeqNo :
     -> (Dynamo.PutResponse -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-saveReadySeqNo timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
-    Dynamo.updateKey
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
-        StatusTable.encode
-        { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
-        }
+saveReady timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
+    save
         { seq = seq
         , updatedAt = timestamp
         , status =
@@ -80,20 +68,35 @@ saveReadySeqNo timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
         conn
 
 
+save :
+    StatusTable.Record
+    -> (Dynamo.PutResponse -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+save record responseFn conn =
+    Dynamo.put
+        (ecoBuildStatusTableName conn)
+        StatusTable.encode
+        record
+        responseFn
+        conn
+
+
 loadPackagesSince :
     Int
     -> (Dynamo.QueryResponse StatusTable.Record -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
 loadPackagesSince seq responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
+    -- let
+    --     query =
+    --         Dynamo.partitionKeyEquals "label" "new"
+    --             |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
+    -- in
+    -- Dynamo.query
+    --     (ecoBuildStatusTableName conn)
+    --     query
+    --     StatusTable.decoder
+    --     responseFn
+    --     conn
+    Debug.todo "loadPackagesSince"

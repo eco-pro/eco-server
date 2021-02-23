@@ -1,4 +1,4 @@
-module DB.RootSiteImports.Queries exposing (saveAllPackages)
+module DB.RootSiteImports.Queries exposing (getBySeq, saveAll)
 
 import AWS.Dynamo as Dynamo
 import DB.RootSiteImports.Table as RootSiteImportsTable
@@ -20,18 +20,33 @@ rootSiteImportsTableName conn =
 -- RootSiteImports
 
 
-saveAllPackages :
+saveAll :
     Posix
     -> List RootSiteImportsTable.Record
     -> (Dynamo.PutResponse -> msg)
     -> (Dynamo.Msg msg -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-saveAllPackages timestamp packages responseFn dynamoMsgFn conn =
+saveAll timestamp packages responseFn dynamoMsgFn conn =
     Dynamo.batchPut
         (rootSiteImportsTableName conn)
         RootSiteImportsTable.encode
         packages
         dynamoMsgFn
+        responseFn
+        conn
+
+
+getBySeq :
+    Int
+    -> (Dynamo.GetResponse RootSiteImportsTable.Record -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+getBySeq seq responseFn conn =
+    Dynamo.get
+        (rootSiteImportsTableName conn)
+        RootSiteImportsTable.encodeKey
+        { seq = seq }
+        RootSiteImportsTable.decoder
         responseFn
         conn

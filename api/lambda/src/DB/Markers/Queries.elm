@@ -1,12 +1,14 @@
 module DB.Markers.Queries exposing
-    ( getLatestSeqNo
-    , getLowestNewSeqNo
-    , getNewSeqNo
-    , saveLatestSeqNo
+    ( getLatest
+    , getProcessedTo
+    , getProcessing
+    , saveLatest
+    , saveProcessedTo
+    , saveProcessing
     )
 
 import AWS.Dynamo as Dynamo
-import DB.BuildStatus.Table as StatusTable
+import DB.Markers.Table as MarkersTable
 import DB.TableNames as TableNames
 import Elm.Project
 import Packages.Config exposing (Config)
@@ -21,73 +23,102 @@ ecoBuildStatusTableName conn =
     TableNames.fqTableName "eco-buildstatus" conn
 
 
-getLatestSeqNo :
-    (Dynamo.QueryResponse StatusTable.Record -> msg)
+get :
+    MarkersTable.Label
+    -> (Dynamo.GetResponse MarkersTable.Record -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-getLatestSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "latest"
-                |> Dynamo.orderResults Dynamo.Reverse
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
+get label responseFn conn =
+    Dynamo.get
         (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
+        MarkersTable.encodeKey
+        { label = label }
+        MarkersTable.decoder
         responseFn
         conn
 
 
-saveLatestSeqNo :
+save :
+    MarkersTable.Record
+    -> (Dynamo.PutResponse -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+save record responseFn conn =
+    Dynamo.put
+        (ecoBuildStatusTableName conn)
+        MarkersTable.encode
+        record
+        responseFn
+        conn
+
+
+getLatest :
+    (Dynamo.GetResponse MarkersTable.Record -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+getLatest responseFn conn =
+    get MarkersTable.Latest responseFn conn
+
+
+saveLatest :
     Posix
     -> Int
     -> (Dynamo.PutResponse -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-saveLatestSeqNo timestamp seq responseFn conn =
-    Dynamo.put
-        (ecoBuildStatusTableName conn)
-        StatusTable.encode
+saveLatest timestamp seq responseFn conn =
+    save
         { seq = seq
         , updatedAt = timestamp
-        , status = StatusTable.Latest
+        , label = MarkersTable.Latest
         }
         responseFn
         conn
 
 
-getLowestNewSeqNo :
-    (Dynamo.QueryResponse StatusTable.Record -> msg)
+getProcessedTo :
+    (Dynamo.GetResponse MarkersTable.Record -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-getLowestNewSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (ecoBuildStatusTableName conn)
-        query
-        StatusTable.decoder
-        responseFn
-        conn
+getProcessedTo responseFn conn =
+    get MarkersTable.ProcessedTo responseFn conn
 
 
-getNewSeqNo :
-    Int
-    -> (Dynamo.GetResponse StatusTable.Record -> msg)
+saveProcessedTo :
+    Posix
+    -> Int
+    -> (Dynamo.PutResponse -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-getNewSeqNo seq responseFn conn =
-    Dynamo.get
-        (ecoBuildStatusTableName conn)
-        StatusTable.encodeKey
+saveProcessedTo timestamp seq responseFn conn =
+    save
         { seq = seq
-        , label = StatusTable.LabelNewFromRootSite
+        , updatedAt = timestamp
+        , label = MarkersTable.ProcessedTo
         }
-        StatusTable.decoder
+        responseFn
+        conn
+
+
+getProcessing :
+    (Dynamo.GetResponse MarkersTable.Record -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+getProcessing responseFn conn =
+    get MarkersTable.Processing responseFn conn
+
+
+saveProcessing :
+    Posix
+    -> Int
+    -> (Dynamo.PutResponse -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+saveProcessing timestamp seq responseFn conn =
+    save
+        { seq = seq
+        , updatedAt = timestamp
+        , label = MarkersTable.Processing
+        }
         responseFn
         conn
