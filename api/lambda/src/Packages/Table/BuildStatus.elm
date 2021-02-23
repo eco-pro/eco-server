@@ -1,4 +1,15 @@
-module Packages.Table.Seq exposing (..)
+module Packages.Table.BuildStatus exposing
+    ( ErrorReason(..)
+    , Key
+    , Label(..)
+    , Record
+    , Status(..)
+    , decoder
+    , encode
+    , encodeErrorReason
+    , encodeKey
+    , errorReasonDecoder
+    )
 
 import Elm.Error
 import Elm.Project exposing (Project)
