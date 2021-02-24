@@ -74,10 +74,10 @@ resources:
       DeletionPolicy: Delete
       Properties:
         AttributeDefinitions:
-          - AttributeName: label
+          - AttributeName: source
             AttributeType: S
         KeySchema:
-          - AttributeName: label
+          - AttributeName: source
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1

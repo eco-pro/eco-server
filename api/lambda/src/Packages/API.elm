@@ -128,12 +128,12 @@ router conn =
                 |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
 
         ( GET, Refresh ) ->
-            MarkersQueries.getLatest CheckSeqNo conn
+            MarkersQueries.get "package-elm-org" CheckSeqNo conn
 
         ( GET, NextJob ) ->
-            MarkersQueries.getProcessedTo
+            MarkersQueries.get "package-elm-org"
                 (GetMarkerAndThen
-                    (\{ seq } innerConn -> RootSiteImportsQueries.getBySeq seq ProvideJobDetails conn)
+                    (\record innerConn -> RootSiteImportsQueries.getBySeq record.processing ProvideJobDetails conn)
                 )
                 conn
 
@@ -159,12 +159,12 @@ type Msg
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
-    | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | PackagesSave Int Posix Dynamo.PutResponse
+    | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
+    | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
     | PackagesSinceLoaded (Dynamo.QueryResponse StatusTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
     | ProvideJobDetails (Dynamo.GetResponse RootSiteImportsTable.Record)
-    | SavedSeqNoState Int Dynamo.PutResponse
+    | SavedSeqNoState Dynamo.PutResponse
 
 
 customLogger : Msg -> String
@@ -191,11 +191,11 @@ customLogger msg =
         CheckSeqNo _ ->
             "CheckSeqNo"
 
-        RefreshPackages seq _ ->
-            "RefreshPackages " ++ String.fromInt seq
+        RefreshPackages _ _ ->
+            "RefreshPackages"
 
-        PackagesSave seq _ _ ->
-            "PackagesSave " ++ String.fromInt seq
+        PackagesSave _ _ _ ->
+            "PackagesSave"
 
         PackagesSinceLoaded _ ->
             "PackagesSinceLoaded"
@@ -206,7 +206,7 @@ customLogger msg =
         ProvideJobDetails _ ->
             "ProvideJobDetails"
 
-        SavedSeqNoState _ _ ->
+        SavedSeqNoState _ ->
             "SavedSeqNoState"
 
 
@@ -252,23 +252,35 @@ update msg conn =
         CheckSeqNo loadResult ->
             case loadResult of
                 Dynamo.GetItemNotFound ->
+                    let
+                        startElm19 =
+                            6557
+                    in
                     ( conn
-                    , RootSite.fetchAllPackagesSince 6557
+                    , RootSite.fetchAllPackagesSince startElm19
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 6557)
+                        |> Task.attempt
+                            (RefreshPackages
+                                { source = "package-elm-org"
+                                , latest = startElm19
+                                , processedTo = startElm19
+                                , processing = startElm19
+                                , updatedAt = Time.millisToPosix 0
+                                }
+                            )
                     )
 
                 Dynamo.GetItem record ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince record.seq
+                    , RootSite.fetchAllPackagesSince record.latest
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages record.seq)
+                        |> Task.attempt (RefreshPackages record)
                     )
 
                 Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        RefreshPackages from result ->
+        RefreshPackages record result ->
             case result of
                 Ok ( timestamp, newPackageList ) ->
                     case newPackageList of
@@ -279,13 +291,13 @@ update msg conn =
                         _ ->
                             let
                                 seq =
-                                    List.length newPackageList + from
+                                    List.length newPackageList + record.latest
 
                                 packageTableEntries =
                                     List.reverse newPackageList
                                         |> List.indexedMap
                                             (\idx fqPackage ->
-                                                { seq = from + idx + 1
+                                                { seq = record.latest + idx + 1
                                                 , updatedAt = timestamp
                                                 , fqPackage = fqPackage
                                                 }
@@ -296,18 +308,18 @@ update msg conn =
                                     (RootSiteImportsQueries.saveAll
                                         timestamp
                                         packageTableEntries
-                                        (PackagesSave seq timestamp)
+                                        (PackagesSave { record | latest = seq } timestamp)
                                         DynamoMsg
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        PackagesSave seq timestamp res ->
+        PackagesSave record timestamp res ->
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (MarkersQueries.saveLatest timestamp seq (SavedSeqNoState seq))
+                        |> andThen (MarkersQueries.save { record | updatedAt = timestamp } SavedSeqNoState)
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -416,7 +428,7 @@ update msg conn =
                 Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        SavedSeqNoState seq res ->
+        SavedSeqNoState res ->
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
@@ -481,7 +493,7 @@ updateAsReady seq record conn =
                         elmJson
                         packageUrl
                         md5
-                        (SavedSeqNoState seq)
+                        SavedSeqNoState
                         conn
                 )
             )
@@ -494,7 +506,7 @@ updateAsReady seq record conn =
                         seq
                         record.fqPackage
                         (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
-                        (SavedSeqNoState seq)
+                        SavedSeqNoState
                         conn
                 )
             )
@@ -516,7 +528,7 @@ updateAsError seq record conn =
                         seq
                         record.fqPackage
                         errorReason
-                        (SavedSeqNoState seq)
+                        SavedSeqNoState
                         conn
                 )
             )
