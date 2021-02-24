@@ -9,6 +9,7 @@ module DB.BuildStatus.Table exposing
     , encodeErrorReason
     , encodeKey
     , errorReasonDecoder
+    , labelToString
     )
 
 import Elm.Error

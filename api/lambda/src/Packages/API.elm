@@ -114,12 +114,16 @@ router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         -- The original package site API
         ( GET, AllPackages ) ->
-            ( conn, Cmd.none )
-                |> andThen (StatusQueries.loadPackagesSince 0 AllPackagesLoaded)
+            StatusQueries.getPackagesSince 0
+                StatusTable.LabelReady
+                ReadyPackagesLoaded
+                conn
 
         ( POST, AllPackagesSince since ) ->
-            ( conn, Cmd.none )
-                |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
+            StatusQueries.getPackagesSince since
+                StatusTable.LabelReady
+                (ReadyPackagesSinceLoaded since)
+                conn
 
         ( GET, ElmJson author name version ) ->
             ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
@@ -167,8 +171,10 @@ type Msg
     | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
     | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
-    | PackagesSinceLoaded (Dynamo.QueryResponse StatusTable.Record)
-    | AllPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
+    | ReadyPackagesSinceLoaded Int (Dynamo.QueryResponse StatusTable.Record)
+    | ReadyPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
+    | PackagesSinceLoaded (List StatusTable.Record) (Dynamo.QueryResponse StatusTable.Record)
+    | AllPackagesLoaded (List StatusTable.Record) (Dynamo.QueryResponse StatusTable.Record)
     | SaveJobState MarkersTable.Record (Dynamo.GetResponse RootSiteImportsTable.Record)
     | ProvideJobDetails MarkersTable.Record RootSiteImportsTable.Record Dynamo.PutResponse
     | SavedSeqNoState Dynamo.PutResponse
@@ -208,10 +214,16 @@ customLogger msg =
         PackagesSave _ _ _ ->
             "PackagesSave"
 
-        PackagesSinceLoaded _ ->
+        ReadyPackagesSinceLoaded _ _ ->
+            "ReadyPackagesSinceLoaded"
+
+        ReadyPackagesLoaded _ ->
+            "ReadyPackagesLoaded"
+
+        PackagesSinceLoaded _ _ ->
             "PackagesSinceLoaded"
 
-        AllPackagesLoaded _ ->
+        AllPackagesLoaded _ _ ->
             "AllPackagesLoaded"
 
         SaveJobState _ _ ->
@@ -344,23 +356,50 @@ update msg conn =
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        PackagesSinceLoaded loadResult ->
+        ReadyPackagesSinceLoaded since loadResult ->
             case loadResult of
                 Dynamo.BatchGetItems records ->
+                    StatusQueries.getPackagesSince since
+                        StatusTable.LabelError
+                        (PackagesSinceLoaded records)
+                        conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        ReadyPackagesLoaded loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems records ->
+                    StatusQueries.getPackagesSince 0
+                        StatusTable.LabelError
+                        (AllPackagesLoaded records)
+                        conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        PackagesSinceLoaded readyRecords loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems errorRecords ->
                     let
+                        records =
+                            List.append readyRecords errorRecords
+                                |> List.map (\item -> ( item.seq, item ))
+                                |> Dict.fromList
+                                |> Dict.values
+
                         readyPackage status =
                             case status of
                                 StatusTable.Ready { fqPackage } ->
-                                    Just fqPackage
+                                    fqPackage
 
-                                _ ->
-                                    Nothing
+                                StatusTable.Error { fqPackage } ->
+                                    fqPackage
 
                         jsonRecords =
                             records
                                 |> List.map (.status >> readyPackage)
                                 |> List.reverse
-                                |> Maybe.Extra.values
                                 |> Encode.list (FQPackage.toString >> Encode.string)
                     in
                     respond ( 200, Body.json jsonRecords ) conn
@@ -368,23 +407,28 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        AllPackagesLoaded loadResult ->
+        AllPackagesLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.BatchGetItems errorRecords ->
                     let
+                        records =
+                            List.append readyRecords errorRecords
+                                |> List.map (\item -> ( item.seq, item ))
+                                |> Dict.fromList
+                                |> Dict.values
+
                         readyPackage status =
                             case status of
                                 StatusTable.Ready { fqPackage } ->
-                                    Just fqPackage
+                                    fqPackage
 
-                                _ ->
-                                    Nothing
+                                StatusTable.Error { fqPackage } ->
+                                    fqPackage
 
                         jsonRecords =
                             records
                                 |> List.map (.status >> readyPackage)
                                 |> List.reverse
-                                |> Maybe.Extra.values
                                 |> groupByName
                                 |> Encode.dict identity (Encode.list Elm.Version.encode)
 

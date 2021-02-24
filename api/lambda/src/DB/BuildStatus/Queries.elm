@@ -1,5 +1,5 @@
 module DB.BuildStatus.Queries exposing
-    ( loadPackagesSince
+    ( getPackagesSince
     , saveError
     , saveReady
     )
@@ -82,21 +82,21 @@ save record responseFn conn =
         conn
 
 
-loadPackagesSince :
+getPackagesSince :
     Int
+    -> StatusTable.Label
     -> (Dynamo.QueryResponse StatusTable.Record -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-loadPackagesSince seq responseFn conn =
-    -- let
-    --     query =
-    --         Dynamo.partitionKeyEquals "label" "new"
-    --             |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
-    -- in
-    -- Dynamo.query
-    --     (ecoBuildStatusTableName conn)
-    --     query
-    --     StatusTable.decoder
-    --     responseFn
-    --     conn
-    Debug.todo "loadPackagesSince"
+getPackagesSince seq label responseFn conn =
+    let
+        query =
+            Dynamo.partitionKeyEquals "label" (StatusTable.labelToString label)
+                |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
+    in
+    Dynamo.query
+        (ecoBuildStatusTableName conn)
+        query
+        StatusTable.decoder
+        responseFn
+        conn
