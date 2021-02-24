@@ -50,7 +50,7 @@ resources:
       Properties:
         BucketName: elm-packages
 
-    ElmSeqDynamoDBTable:
+    BuildStatusTable:
       Type: 'AWS::DynamoDB::Table'
       DeletionPolicy: Delete
       Properties:
@@ -67,23 +67,53 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-elm-seq
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
 
-    ElmPackagesDynamoDBTable:
+    MarkersTable:
       Type: 'AWS::DynamoDB::Table'
       DeletionPolicy: Delete
       Properties:
         AttributeDefinitions:
-          - AttributeName: name
-            AttributeType: S
-          - AttributeName: version
+          - AttributeName: source
             AttributeType: S
         KeySchema:
-          - AttributeName: name
+          - AttributeName: source
             KeyType: HASH
-          - AttributeName: version
-            KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-elm-packages
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
+
+    RootSiteImportsTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: seq
+            AttributeType: N
+        KeySchema:
+          - AttributeName: seq
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-rootsiteimports
+
+    # ElmPackagesDynamoDBTable:
+    #   Type: 'AWS::DynamoDB::Table'
+    #   DeletionPolicy: Delete
+    #   Properties:
+    #     AttributeDefinitions:
+    #       - AttributeName: name
+    #         AttributeType: S
+    #       - AttributeName: version
+    #         AttributeType: S
+    #     KeySchema:
+    #       - AttributeName: name
+    #         KeyType: HASH
+    #       - AttributeName: version
+    #         KeyType: RANGE
+    #     ProvisionedThroughput:
+    #       ReadCapacityUnits: 1
+    #       WriteCapacityUnits: 1
+    #     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-packages

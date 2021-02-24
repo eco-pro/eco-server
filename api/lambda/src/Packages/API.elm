@@ -1,18 +1,23 @@
 port module Packages.API exposing (main)
 
+import AWS.Dynamo as Dynamo
+import DB.BuildStatus.Queries as StatusQueries
+import DB.BuildStatus.Table as StatusTable
+import DB.Markers.Queries as MarkersQueries
+import DB.Markers.Table as MarkersTable
+import DB.RootSiteImports.Queries as RootSiteImportsQueries
+import DB.RootSiteImports.Table as RootSiteImportsTable
 import Dict exposing (Dict)
 import Elm.Package
 import Elm.Project
 import Elm.Version
 import Http
+import Http.RootSite as RootSite
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
-import Packages.Dynamo as Dynamo
+import Packages.Config as Config exposing (Config)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
-import Packages.RootSite as RootSite
-import Packages.Table.Packages as PackagesTable
-import Packages.Table.Seq as SeqTable
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
@@ -46,7 +51,7 @@ type alias Conn =
 main : Serverless.Program Config () Route Msg
 main =
     Serverless.httpApi
-        { configDecoder = configDecoder
+        { configDecoder = Config.configDecoder
         , initialModel = ()
         , parseRoute = routeParser
         , endpoint = router
@@ -55,21 +60,6 @@ main =
         , requestPort = requestPort
         , responsePort = responsePort
         }
-
-
-
--- Configuration
-
-
-type alias Config =
-    { dynamoDbNamespace : String
-    }
-
-
-configDecoder : Decoder Config
-configDecoder =
-    Decode.field "DYNAMODB_NAMESPACE" Decode.string
-        |> Decode.map Config
 
 
 
@@ -90,26 +80,31 @@ type Route
 routeParser : Url.Url -> Maybe Route
 routeParser =
     oneOf
-        [ map AllPackages (s "all-packages")
-        , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
+        [ -- The original package site API
+          map AllPackages (s "v1" </> s "all-packages")
+        , map AllPackagesSince (s "v1" </> s "all-packages" </> s "since" </> Url.Parser.int)
         , map ElmJson
-            (s "packages"
+            (s "v1"
+                </> s "packages"
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> s "elm.json"
             )
         , map EndpointJson
-            (s "packages"
+            (s "v1"
+                </> s "packages"
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> s "endpoint.json"
             )
-        , map Refresh (s "packages" </> s "refresh")
-        , map NextJob (s "packages" </> s "nextjob")
-        , map PackageError (s "packages" </> Url.Parser.int </> s "error")
-        , map PackageReady (s "packages" </> Url.Parser.int </> s "ready")
+
+        -- The root site build job API
+        , map Refresh (s "root-site" </> s "packages" </> s "refresh")
+        , map NextJob (s "root-site" </> s "packages" </> s "nextjob")
+        , map PackageError (s "root-site" </> s "packages" </> Url.Parser.int </> s "error")
+        , map PackageReady (s "root-site" </> s "packages" </> Url.Parser.int </> s "ready")
         ]
         |> Url.Parser.parse
 
@@ -119,12 +114,16 @@ router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         -- The original package site API
         ( GET, AllPackages ) ->
-            ( conn, Cmd.none )
-                |> andThen (loadPackagesSince 0 AllPackagesLoaded)
+            StatusQueries.getPackagesSince 0
+                StatusTable.LabelReady
+                ReadyPackagesLoaded
+                conn
 
         ( POST, AllPackagesSince since ) ->
-            ( conn, Cmd.none )
-                |> andThen (loadPackagesSince since PackagesSinceLoaded)
+            StatusQueries.getPackagesSince since
+                StatusTable.LabelReady
+                (ReadyPackagesSinceLoaded since)
+                conn
 
         ( GET, ElmJson author name version ) ->
             ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
@@ -132,22 +131,26 @@ router conn =
         ( GET, EndpointJson author name version ) ->
             ( conn, RootSite.fetchEndpointJson PassthroughEndpointJson author name version )
 
-        -- The enhanced API
-        ( GET, AllPackagesSince since ) ->
-            ( conn, Cmd.none )
-                |> andThen (loadPackagesSince since PackagesSinceLoaded)
-
+        -- The root site build job API
         ( GET, Refresh ) ->
-            getLatestSeqNo CheckSeqNo conn
+            MarkersQueries.get "package-elm-org" CheckSeqNo conn
 
         ( GET, NextJob ) ->
-            getLowestNewSeqNo ProvideJobDetails conn
+            MarkersQueries.get "package-elm-org"
+                (GetMarkerAndThen
+                    (\record innerConn ->
+                        RootSiteImportsQueries.getBySeq (record.processedTo + 1)
+                            (SaveJobState record)
+                            conn
+                    )
+                )
+                conn
 
         ( POST, PackageError seq ) ->
-            getNewSeqNo seq (LoadedSeqNoState seq (updateAsError seq)) conn
+            RootSiteImportsQueries.getBySeq seq (GetRootSiteImportAndThen (updateAsError seq)) conn
 
         ( POST, PackageReady seq ) ->
-            getNewSeqNo seq (LoadedSeqNoState seq (updateAsReady seq)) conn
+            RootSiteImportsQueries.getBySeq seq (GetRootSiteImportAndThen (updateAsReady seq)) conn
 
         ( _, _ ) ->
             respond ( 405, Body.text "Method not allowed" ) conn
@@ -158,28 +161,43 @@ router conn =
 
 
 type Msg
-    = DynamoMsg (Dynamo.Msg Msg)
+    = Noop
+    | DynamoMsg (Dynamo.Msg Msg)
     | TimestampAndThen (Posix -> ( Conn, Cmd Msg )) Posix
+    | GetRootSiteImportAndThen (RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse RootSiteImportsTable.Record)
+    | GetMarkerAndThen (MarkersTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse MarkersTable.Record)
     | PassthroughElmJson (Result Http.Error Decode.Value)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
-    | CheckSeqNo (Dynamo.QueryResponse SeqTable.Record)
-    | RefreshPackages Int (Result Http.Error ( Posix, List FQPackage ))
-    | PackagesSave Int Posix Dynamo.PutResponse
-    | PackagesSinceLoaded (Dynamo.QueryResponse SeqTable.Record)
-    | AllPackagesLoaded (Dynamo.QueryResponse SeqTable.Record)
-    | ProvideJobDetails (Dynamo.QueryResponse SeqTable.Record)
-    | LoadedSeqNoState Int (SeqTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse SeqTable.Record)
-    | SavedSeqNoState Int Dynamo.PutResponse
+    | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
+    | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
+    | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
+    | ReadyPackagesSinceLoaded Int (Dynamo.QueryResponse StatusTable.Record)
+    | ReadyPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
+    | PackagesSinceLoaded (List StatusTable.Record) (Dynamo.QueryResponse StatusTable.Record)
+    | AllPackagesLoaded (List StatusTable.Record) (Dynamo.QueryResponse StatusTable.Record)
+    | SaveJobState MarkersTable.Record (Dynamo.GetResponse RootSiteImportsTable.Record)
+    | ProvideJobDetails MarkersTable.Record RootSiteImportsTable.Record Dynamo.PutResponse
+    | SavedSeqNoState Dynamo.PutResponse
+    | MarkJobComplete Int Posix Dynamo.PutResponse
 
 
 customLogger : Msg -> String
 customLogger msg =
     case msg of
+        Noop ->
+            "Noop"
+
         DynamoMsg _ ->
             "DynamoMsg"
 
         TimestampAndThen _ _ ->
             "TimestampAndThen"
+
+        GetRootSiteImportAndThen _ _ ->
+            "GetRootSiteImportAndThen"
+
+        GetMarkerAndThen _ _ ->
+            "GetMarkerAndThen"
 
         PassthroughElmJson _ ->
             "PassthroughElmJson"
@@ -190,26 +208,35 @@ customLogger msg =
         CheckSeqNo _ ->
             "CheckSeqNo"
 
-        RefreshPackages seq _ ->
-            "RefreshPackages " ++ String.fromInt seq
+        RefreshPackages _ _ ->
+            "RefreshPackages"
 
-        PackagesSave seq _ _ ->
-            "PackagesSave " ++ String.fromInt seq
+        PackagesSave _ _ _ ->
+            "PackagesSave"
 
-        PackagesSinceLoaded _ ->
+        ReadyPackagesSinceLoaded _ _ ->
+            "ReadyPackagesSinceLoaded"
+
+        ReadyPackagesLoaded _ ->
+            "ReadyPackagesLoaded"
+
+        PackagesSinceLoaded _ _ ->
             "PackagesSinceLoaded"
 
-        AllPackagesLoaded _ ->
+        AllPackagesLoaded _ _ ->
             "AllPackagesLoaded"
 
-        ProvideJobDetails _ ->
+        SaveJobState _ _ ->
+            "SaveJobState"
+
+        ProvideJobDetails _ _ _ ->
             "ProvideJobDetails"
 
-        LoadedSeqNoState _ _ _ ->
-            "LoadedSeqNoState"
-
-        SavedSeqNoState _ _ ->
+        SavedSeqNoState _ ->
             "SavedSeqNoState"
+
+        MarkJobComplete _ _ _ ->
+            "MarkJobComplete"
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -219,6 +246,9 @@ update msg conn =
             Debug.log "update" (customLogger msg)
     in
     case msg of
+        Noop ->
+            ( conn, Cmd.none )
+
         DynamoMsg innerMsg ->
             let
                 ( nextConn, dynamoCmd ) =
@@ -228,6 +258,12 @@ update msg conn =
 
         TimestampAndThen msgFn timestamp ->
             msgFn timestamp
+
+        GetRootSiteImportAndThen recordFn getResponse ->
+            withDynamoGet recordFn getResponse conn
+
+        GetMarkerAndThen recordFn getResponse ->
+            withDynamoGet recordFn getResponse conn
 
         PassthroughElmJson result ->
             case result of
@@ -247,24 +283,36 @@ update msg conn =
 
         CheckSeqNo loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems [] ->
+                Dynamo.GetItemNotFound ->
+                    let
+                        startElm19 =
+                            6557
+                    in
                     ( conn
-                    , RootSite.fetchAllPackagesSince 6557
+                    , RootSite.fetchAllPackagesSince startElm19
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages 6557)
+                        |> Task.attempt
+                            (RefreshPackages
+                                { source = "package-elm-org"
+                                , latest = startElm19
+                                , processedTo = startElm19
+                                , processing = startElm19
+                                , updatedAt = Time.millisToPosix 0
+                                }
+                            )
                     )
 
-                Dynamo.BatchGetItems (record :: _) ->
+                Dynamo.GetItem record ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince record.seq
+                    , RootSite.fetchAllPackagesSince record.latest
                         |> Task.map2 Tuple.pair Time.now
-                        |> Task.attempt (RefreshPackages record.seq)
+                        |> Task.attempt (RefreshPackages record)
                     )
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        RefreshPackages from result ->
+        RefreshPackages record result ->
             case result of
                 Ok ( timestamp, newPackageList ) ->
                     case newPackageList of
@@ -275,55 +323,83 @@ update msg conn =
                         _ ->
                             let
                                 seq =
-                                    List.length newPackageList + from
+                                    List.length newPackageList + record.latest
 
                                 packageTableEntries =
                                     List.reverse newPackageList
                                         |> List.indexedMap
                                             (\idx fqPackage ->
-                                                { seq = from + idx + 1
+                                                { seq = record.latest + idx + 1
                                                 , updatedAt = timestamp
-                                                , status = SeqTable.NewFromRootSite { fqPackage = fqPackage }
+                                                , fqPackage = fqPackage
                                                 }
                                             )
                             in
                             ( conn, Cmd.none )
                                 |> andThen
-                                    (saveAllPackages
+                                    (RootSiteImportsQueries.saveAll
                                         timestamp
                                         packageTableEntries
-                                        (PackagesSave seq timestamp)
+                                        (PackagesSave { record | latest = seq } timestamp)
+                                        DynamoMsg
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
-        PackagesSave seq timestamp res ->
+        PackagesSave record timestamp res ->
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
-                        |> andThen (saveLatestSeqNo timestamp seq (SavedSeqNoState seq))
+                        |> andThen (MarkersQueries.save { record | updatedAt = timestamp } SavedSeqNoState)
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        PackagesSinceLoaded loadResult ->
+        ReadyPackagesSinceLoaded since loadResult ->
             case loadResult of
                 Dynamo.BatchGetItems records ->
+                    StatusQueries.getPackagesSince since
+                        StatusTable.LabelError
+                        (PackagesSinceLoaded records)
+                        conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        ReadyPackagesLoaded loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems records ->
+                    StatusQueries.getPackagesSince 0
+                        StatusTable.LabelError
+                        (AllPackagesLoaded records)
+                        conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        PackagesSinceLoaded readyRecords loadResult ->
+            case loadResult of
+                Dynamo.BatchGetItems errorRecords ->
                     let
+                        records =
+                            List.append readyRecords errorRecords
+                                |> List.map (\item -> ( item.seq, item ))
+                                |> Dict.fromList
+                                |> Dict.values
+
                         readyPackage status =
                             case status of
-                                SeqTable.Ready { fqPackage } ->
-                                    Just fqPackage
+                                StatusTable.Ready { fqPackage } ->
+                                    fqPackage
 
-                                _ ->
-                                    Nothing
+                                StatusTable.Error { fqPackage } ->
+                                    fqPackage
 
                         jsonRecords =
                             records
                                 |> List.map (.status >> readyPackage)
                                 |> List.reverse
-                                |> Maybe.Extra.values
                                 |> Encode.list (FQPackage.toString >> Encode.string)
                     in
                     respond ( 200, Body.json jsonRecords ) conn
@@ -331,23 +407,28 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        AllPackagesLoaded loadResult ->
+        AllPackagesLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.BatchGetItems errorRecords ->
                     let
+                        records =
+                            List.append readyRecords errorRecords
+                                |> List.map (\item -> ( item.seq, item ))
+                                |> Dict.fromList
+                                |> Dict.values
+
                         readyPackage status =
                             case status of
-                                SeqTable.Ready { fqPackage } ->
-                                    Just fqPackage
+                                StatusTable.Ready { fqPackage } ->
+                                    fqPackage
 
-                                _ ->
-                                    Nothing
+                                StatusTable.Error { fqPackage } ->
+                                    fqPackage
 
                         jsonRecords =
                             records
                                 |> List.map (.status >> readyPackage)
                                 |> List.reverse
-                                |> Maybe.Extra.values
                                 |> groupByName
                                 |> Encode.dict identity (Encode.list Elm.Version.encode)
 
@@ -373,65 +454,88 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        ProvideJobDetails loadResult ->
+        SaveJobState markerRecord loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems [] ->
+                Dynamo.GetItemNotFound ->
                     respond ( 404, Body.text "No job." ) conn
 
-                Dynamo.BatchGetItems (record :: _) ->
-                    case record.status of
-                        SeqTable.NewFromRootSite { fqPackage } ->
-                            let
-                                job =
-                                    { seq = record.seq
-                                    , fqPackage = fqPackage
-                                    , zipUrl =
-                                        Url.Builder.crossOrigin
-                                            "https://github.com"
-                                            [ Elm.Package.toString fqPackage.name
-                                            , "archive"
-                                            , Elm.Version.toString fqPackage.version ++ ".zip"
-                                            ]
-                                            []
-                                    , author =
-                                        Elm.Package.toString fqPackage.name
-                                            |> String.split "/"
-                                            |> List.head
-                                            |> Maybe.withDefault ""
-                                    , name =
-                                        Elm.Package.toString fqPackage.name
-                                            |> String.split "/"
-                                            |> List.tail
-                                            |> Maybe.map List.head
-                                            |> Maybe.Extra.join
-                                            |> Maybe.withDefault ""
-                                    , version = fqPackage.version
-                                    }
-                            in
-                            respond ( 200, Body.json (encodeBuildJob job) ) conn
-
-                        _ ->
-                            respond ( 404, Body.text "No job." ) conn
-
-                Dynamo.BatchGetError dbErrorMsg ->
-                    error dbErrorMsg conn
-
-        LoadedSeqNoState seq recordFn getResponse ->
-            case getResponse of
-                Dynamo.GetItem record ->
-                    recordFn record conn
-
-                Dynamo.GetItemNotFound ->
-                    error "Item not found." conn
+                Dynamo.GetItem rootSiteImportRecord ->
+                    ( conn
+                    , withTimestamp
+                        (\posix ->
+                            MarkersQueries.save
+                                { markerRecord
+                                    | processing = markerRecord.processedTo + 1
+                                    , updatedAt = posix
+                                }
+                                (ProvideJobDetails markerRecord rootSiteImportRecord)
+                                conn
+                        )
+                    )
 
                 Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        SavedSeqNoState seq res ->
+        ProvideJobDetails markerRecord { seq, fqPackage } putResult ->
+            case putResult of
+                Dynamo.PutOk ->
+                    let
+                        job =
+                            { seq = seq
+                            , fqPackage = fqPackage
+                            , zipUrl =
+                                Url.Builder.crossOrigin
+                                    "https://github.com"
+                                    [ Elm.Package.toString fqPackage.name
+                                    , "archive"
+                                    , Elm.Version.toString fqPackage.version ++ ".zip"
+                                    ]
+                                    []
+                            , author =
+                                Elm.Package.toString fqPackage.name
+                                    |> String.split "/"
+                                    |> List.head
+                                    |> Maybe.withDefault ""
+                            , name =
+                                Elm.Package.toString fqPackage.name
+                                    |> String.split "/"
+                                    |> List.tail
+                                    |> Maybe.map List.head
+                                    |> Maybe.Extra.join
+                                    |> Maybe.withDefault ""
+                            , version = fqPackage.version
+                            }
+                    in
+                    respond ( 200, Body.json (encodeBuildJob job) ) conn
+
+                Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        SavedSeqNoState res ->
             case res of
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
                         |> andThen createdOk
+
+                Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        MarkJobComplete seq posix res ->
+            case res of
+                Dynamo.PutOk ->
+                    MarkersQueries.get "package-elm-org"
+                        (GetMarkerAndThen
+                            (\record innerConn ->
+                                MarkersQueries.save
+                                    { record
+                                        | processedTo = seq
+                                        , updatedAt = posix
+                                    }
+                                    SavedSeqNoState
+                                    conn
+                            )
+                        )
+                        conn
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -446,267 +550,22 @@ andThen fn ( model, cmd ) =
     ( nextModel, Cmd.batch [ cmd, nextCmd ] )
 
 
-updateAsReady : Int -> SeqTable.Record -> Conn -> ( Conn, Cmd Msg )
-updateAsReady seq record conn =
-    let
-        bodyDecoder =
-            Decode.succeed
-                (\elmJson packageUrl md5 ->
-                    { elmJson = elmJson
-                    , packageUrl = packageUrl
-                    , md5 = md5
-                    }
-                )
-                |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
-                |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
-                |> decodeAndMap (Decode.field "md5" Decode.string)
-
-        elmJsonResult =
-            Conn.request conn
-                |> Request.body
-                |> Body.asJson
-                |> Result.andThen
-                    (\val ->
-                        Decode.decodeValue bodyDecoder val
-                            |> Result.mapError Decode.errorToString
-                    )
-    in
-    case elmJsonResult of
-        Ok { elmJson, packageUrl, md5 } ->
-            case record.status of
-                SeqTable.NewFromRootSite { fqPackage } ->
-                    ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveReadySeqNo posix
-                                        seq
-                                        fqPackage
-                                        elmJson
-                                        packageUrl
-                                        md5
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
-                    )
-
-                _ ->
-                    error "Item with seq not found in correct state." conn
-
-        Err decodeErrMsg ->
-            case record.status of
-                SeqTable.NewFromRootSite { fqPackage } ->
-                    ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveErrorSeqNo posix
-                                        seq
-                                        fqPackage
-                                        (SeqTable.ErrorElmJsonInvalid decodeErrMsg)
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
-                    )
-
-                _ ->
-                    error "Item with seq not found in correct state." conn
+withTimestamp : (Posix -> ( Conn, Cmd Msg )) -> Cmd Msg
+withTimestamp fn =
+    Time.now |> Task.perform (TimestampAndThen fn)
 
 
-updateAsError : Int -> SeqTable.Record -> Conn -> ( Conn, Cmd Msg )
-updateAsError seq record conn =
-    let
-        errorMsgResult =
-            Conn.request conn
-                |> Request.body
-                |> Body.asJson
-                |> Result.mapError (always SeqTable.ErrorOther)
-                |> Result.andThen
-                    (\val ->
-                        Decode.decodeValue SeqTable.errorReasonDecoder val
-                            |> Result.mapError (always SeqTable.ErrorOther)
-                    )
-    in
-    case errorMsgResult of
-        Ok errorReason ->
-            case record.status of
-                SeqTable.NewFromRootSite { fqPackage } ->
-                    ( conn
-                    , Time.now
-                        |> Task.perform
-                            (TimestampAndThen
-                                (\posix ->
-                                    saveErrorSeqNo posix
-                                        seq
-                                        fqPackage
-                                        errorReason
-                                        (SavedSeqNoState seq)
-                                        conn
-                                )
-                            )
-                    )
+withDynamoGet : (a -> Conn -> ( Conn, Cmd Msg )) -> Dynamo.GetResponse a -> Conn -> ( Conn, Cmd Msg )
+withDynamoGet recordFn getResponse conn =
+    case getResponse of
+        Dynamo.GetItem record ->
+            recordFn record conn
 
-                _ ->
-                    error "Item with seq not found in correct state." conn
+        Dynamo.GetItemNotFound ->
+            respond ( 404, Body.text "Item not found." ) conn
 
-        Err decodeErrMsg ->
-            jsonError (SeqTable.encodeErrorReason decodeErrMsg |> Encode.object) conn
-
-
-saveAllPackages :
-    Posix
-    -> List SeqTable.Record
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveAllPackages timestamp packages responseFn conn =
-    Dynamo.batchPut
-        (fqTableName "eco-elm-seq" conn)
-        SeqTable.encode
-        packages
-        DynamoMsg
-        responseFn
-        conn
-
-
-getLatestSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getLatestSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "latest"
-                |> Dynamo.orderResults Dynamo.Reverse
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (fqTableName "eco-elm-seq" conn)
-        query
-        SeqTable.decoder
-        responseFn
-        conn
-
-
-saveLatestSeqNo : Posix -> Int -> (Dynamo.PutResponse -> Msg) -> Conn -> ( Conn, Cmd Msg )
-saveLatestSeqNo timestamp seq responseFn conn =
-    Dynamo.put
-        (fqTableName "eco-elm-seq" conn)
-        SeqTable.encode
-        { seq = seq
-        , updatedAt = timestamp
-        , status = SeqTable.Latest
-        }
-        responseFn
-        conn
-
-
-saveErrorSeqNo :
-    Posix
-    -> Int
-    -> FQPackage
-    -> SeqTable.ErrorReason
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveErrorSeqNo timestamp seq fqPackage errorReason responseFn conn =
-    Dynamo.updateKey
-        (fqTableName "eco-elm-seq" conn)
-        SeqTable.encodeKey
-        SeqTable.encode
-        { seq = seq
-        , label = SeqTable.LabelNewFromRootSite
-        }
-        { seq = seq
-        , updatedAt = timestamp
-        , status =
-            SeqTable.Error
-                { fqPackage = fqPackage
-                , errorReason = errorReason
-                }
-        }
-        responseFn
-        conn
-
-
-saveReadySeqNo :
-    Posix
-    -> Int
-    -> FQPackage
-    -> Elm.Project.Project
-    -> Url
-    -> String
-    -> (Dynamo.PutResponse -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-saveReadySeqNo timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
-    Dynamo.updateKey
-        (fqTableName "eco-elm-seq" conn)
-        SeqTable.encodeKey
-        SeqTable.encode
-        { seq = seq
-        , label = SeqTable.LabelNewFromRootSite
-        }
-        { seq = seq
-        , updatedAt = timestamp
-        , status =
-            SeqTable.Ready
-                { fqPackage = fqPackage
-                , elmJson = elmJson
-                , packageUrl = packageUrl
-                , md5 = md5
-                }
-        }
-        responseFn
-        conn
-
-
-getLowestNewSeqNo : (Dynamo.QueryResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getLowestNewSeqNo responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.limitResults 1
-    in
-    Dynamo.query
-        (fqTableName "eco-elm-seq" conn)
-        query
-        SeqTable.decoder
-        responseFn
-        conn
-
-
-getNewSeqNo : Int -> (Dynamo.GetResponse SeqTable.Record -> Msg) -> Conn -> ( Conn, Cmd Msg )
-getNewSeqNo seq responseFn conn =
-    Dynamo.get
-        (fqTableName "eco-elm-seq" conn)
-        SeqTable.encodeKey
-        { seq = seq
-        , label = SeqTable.LabelNewFromRootSite
-        }
-        SeqTable.decoder
-        responseFn
-        conn
-
-
-loadPackagesSince :
-    Int
-    -> (Dynamo.QueryResponse SeqTable.Record -> Msg)
-    -> Conn
-    -> ( Conn, Cmd Msg )
-loadPackagesSince seq responseFn conn =
-    let
-        query =
-            Dynamo.partitionKeyEquals "label" "new"
-                |> Dynamo.rangeKeyGreaterThan "seq" (Dynamo.int seq)
-    in
-    Dynamo.query
-        (fqTableName "eco-elm-seq" conn)
-        query
-        SeqTable.decoder
-        responseFn
-        conn
+        Dynamo.GetError dbErrorMsg ->
+            error dbErrorMsg conn
 
 
 createdOk : Conn -> ( Conn, Cmd Msg )
@@ -722,6 +581,63 @@ error msg conn =
 jsonError : Value -> Conn -> ( Conn, Cmd Msg )
 jsonError json conn =
     respond ( 500, Body.json json ) conn
+
+
+updateAsReady : Int -> RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )
+updateAsReady seq record conn =
+    case decodeJsonBody successReportDecoder conn of
+        Ok { elmJson, packageUrl, md5 } ->
+            ( conn
+            , withTimestamp
+                (\posix ->
+                    StatusQueries.saveReady posix
+                        seq
+                        record.fqPackage
+                        elmJson
+                        packageUrl
+                        md5
+                        (MarkJobComplete seq posix)
+                        conn
+                )
+            )
+
+        Err decodeErrMsg ->
+            ( conn
+            , withTimestamp
+                (\posix ->
+                    StatusQueries.saveError posix
+                        seq
+                        record.fqPackage
+                        (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
+                        (MarkJobComplete seq posix)
+                        conn
+                )
+            )
+
+
+updateAsError : Int -> RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )
+updateAsError seq record conn =
+    let
+        errorMsgResult =
+            decodeJsonBody errorReportDecoder conn
+                |> Result.mapError (always StatusTable.ErrorOther)
+    in
+    case errorMsgResult of
+        Ok errorReason ->
+            ( conn
+            , withTimestamp
+                (\posix ->
+                    StatusQueries.saveError posix
+                        seq
+                        record.fqPackage
+                        errorReason
+                        (MarkJobComplete seq posix)
+                        conn
+                )
+            )
+
+        Err decodeErrMsg ->
+            jsonError (StatusTable.encodeErrorReason decodeErrMsg |> Encode.object) conn
 
 
 
@@ -751,12 +667,35 @@ encodeBuildJob val =
 
 
 
--- DynamoDB Tables
+-- Success Report
 
 
-fqTableName : String -> Conn -> String
-fqTableName name conn =
-    (Conn.config conn).dynamoDbNamespace ++ "-" ++ name
+type alias SuccessReport =
+    { elmJson : Elm.Project.Project
+    , packageUrl : Url
+    , md5 : String
+    }
+
+
+successReportDecoder : Decoder SuccessReport
+successReportDecoder =
+    Decode.succeed SuccessReport
+        |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
+        |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
+        |> decodeAndMap (Decode.field "md5" Decode.string)
+
+
+
+-- Error Report
+
+
+type alias ErrorReport =
+    StatusTable.ErrorReason
+
+
+errorReportDecoder : Decoder ErrorReport
+errorReportDecoder =
+    StatusTable.errorReasonDecoder
 
 
 
@@ -780,4 +719,16 @@ decodeUrl =
 
                     Just val ->
                         Decode.succeed val
+            )
+
+
+decodeJsonBody : Decoder a -> Conn.Conn config model route msg -> Result String a
+decodeJsonBody decoder conn =
+    Conn.request conn
+        |> Request.body
+        |> Body.asJson
+        |> Result.andThen
+            (\val ->
+                Decode.decodeValue decoder val
+                    |> Result.mapError Decode.errorToString
             )
