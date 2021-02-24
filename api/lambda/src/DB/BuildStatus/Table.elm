@@ -22,11 +22,7 @@ import Url exposing (Url)
 
 
 type Status
-    = Latest
-    | NewFromRootSite
-        { fqPackage : FQPackage
-        }
-    | Ready
+    = Ready
         { fqPackage : FQPackage
         , elmJson : Project
         , packageUrl : Url
@@ -49,9 +45,7 @@ type ErrorReason
 
 
 type Label
-    = LabelLatest
-    | LabelNewFromRootSite
-    | LabelReady
+    = LabelReady
     | LabelError
 
 
@@ -86,12 +80,6 @@ encode record =
 statusToLabel : Status -> Label
 statusToLabel status =
     case status of
-        Latest ->
-            LabelLatest
-
-        NewFromRootSite _ ->
-            LabelNewFromRootSite
-
         Ready _ ->
             LabelReady
 
@@ -102,12 +90,6 @@ statusToLabel status =
 labelToString : Label -> String
 labelToString label =
     case label of
-        LabelLatest ->
-            "latest"
-
-        LabelNewFromRootSite ->
-            "new"
-
         LabelReady ->
             "ready"
 
@@ -118,12 +100,6 @@ labelToString label =
 encodeStatus : Status -> List ( String, Value )
 encodeStatus status =
     case status of
-        Latest ->
-            []
-
-        NewFromRootSite { fqPackage } ->
-            [ ( "fqPackage", FQPackage.encode fqPackage ) ]
-
         Ready { fqPackage, elmJson, packageUrl, md5 } ->
             [ ( "fqPackage", FQPackage.encode fqPackage )
             , ( "elmJson", Elm.Project.encode elmJson )
@@ -182,13 +158,6 @@ statusDecoder =
         |> Decode.andThen
             (\label ->
                 case label of
-                    "latest" ->
-                        Decode.succeed Latest
-
-                    "new" ->
-                        Decode.field "fqPackage" FQPackage.decoder
-                            |> Decode.map (\fqp -> NewFromRootSite { fqPackage = fqp })
-
                     "ready" ->
                         Decode.succeed
                             (\fqp elmJson packageUrl md5 ->
