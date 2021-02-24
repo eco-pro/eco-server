@@ -44,7 +44,7 @@ def report_error(seq, reason):
     """
     Send an error message to /packages/{seqNo}/error
     """
-    errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+    errorResp = req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/error",
                          json={"errorReason": reason})
 
     if errorResp.status_code == 500:
@@ -57,7 +57,7 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
-    errorResp = req.post("http://localhost:3000/packages/" + str(seq) + "/error",
+    errorResp = req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/error",
                          json={"errorReason": "compile-failed",
                                "compilerVersion": version,
                                "compileErrors": errors,
@@ -178,7 +178,7 @@ while True:
     # Check on the package server what job to do next, if any.
     print("\n  What job?")
 
-    resp = req.get("http://localhost:3000/packages/nextjob")
+    resp = req.get("http://localhost:3000/root-site/packages/nextjob")
 
     if resp.status_code != 200:
         print("No jobs. All done.")

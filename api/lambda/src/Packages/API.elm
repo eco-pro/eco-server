@@ -80,26 +80,31 @@ type Route
 routeParser : Url.Url -> Maybe Route
 routeParser =
     oneOf
-        [ map AllPackages (s "all-packages")
-        , map AllPackagesSince (s "all-packages" </> s "since" </> Url.Parser.int)
+        [ -- The original package site API
+          map AllPackages (s "v1" </> s "all-packages")
+        , map AllPackagesSince (s "v1" </> s "all-packages" </> s "since" </> Url.Parser.int)
         , map ElmJson
-            (s "packages"
+            (s "v1"
+                </> s "packages"
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> s "elm.json"
             )
         , map EndpointJson
-            (s "packages"
+            (s "v1"
+                </> s "packages"
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> Url.Parser.string
                 </> s "endpoint.json"
             )
-        , map Refresh (s "packages" </> s "refresh")
-        , map NextJob (s "packages" </> s "nextjob")
-        , map PackageError (s "packages" </> Url.Parser.int </> s "error")
-        , map PackageReady (s "packages" </> Url.Parser.int </> s "ready")
+
+        -- The root site build job API
+        , map Refresh (s "root-site" </> s "packages" </> s "refresh")
+        , map NextJob (s "root-site" </> s "packages" </> s "nextjob")
+        , map PackageError (s "root-site" </> s "packages" </> Url.Parser.int </> s "error")
+        , map PackageReady (s "root-site" </> s "packages" </> Url.Parser.int </> s "ready")
         ]
         |> Url.Parser.parse
 
@@ -122,11 +127,7 @@ router conn =
         ( GET, EndpointJson author name version ) ->
             ( conn, RootSite.fetchEndpointJson PassthroughEndpointJson author name version )
 
-        -- The enhanced API
-        ( GET, AllPackagesSince since ) ->
-            ( conn, Cmd.none )
-                |> andThen (StatusQueries.loadPackagesSince since PackagesSinceLoaded)
-
+        -- The root site build job API
         ( GET, Refresh ) ->
             MarkersQueries.get "package-elm-org" CheckSeqNo conn
 
