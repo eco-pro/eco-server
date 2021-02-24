@@ -133,7 +133,11 @@ router conn =
         ( GET, NextJob ) ->
             MarkersQueries.get "package-elm-org"
                 (GetMarkerAndThen
-                    (\record innerConn -> RootSiteImportsQueries.getBySeq record.processing ProvideJobDetails conn)
+                    (\record innerConn ->
+                        RootSiteImportsQueries.getBySeq (record.processedTo + 1)
+                            (SaveJobState record)
+                            conn
+                    )
                 )
                 conn
 
@@ -152,7 +156,8 @@ router conn =
 
 
 type Msg
-    = DynamoMsg (Dynamo.Msg Msg)
+    = Noop
+    | DynamoMsg (Dynamo.Msg Msg)
     | TimestampAndThen (Posix -> ( Conn, Cmd Msg )) Posix
     | GetRootSiteImportAndThen (RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse RootSiteImportsTable.Record)
     | GetMarkerAndThen (MarkersTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse MarkersTable.Record)
@@ -163,13 +168,18 @@ type Msg
     | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
     | PackagesSinceLoaded (Dynamo.QueryResponse StatusTable.Record)
     | AllPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
-    | ProvideJobDetails (Dynamo.GetResponse RootSiteImportsTable.Record)
+    | SaveJobState MarkersTable.Record (Dynamo.GetResponse RootSiteImportsTable.Record)
+    | ProvideJobDetails MarkersTable.Record RootSiteImportsTable.Record Dynamo.PutResponse
     | SavedSeqNoState Dynamo.PutResponse
+    | MarkJobComplete Int Posix Dynamo.PutResponse
 
 
 customLogger : Msg -> String
 customLogger msg =
     case msg of
+        Noop ->
+            "Noop"
+
         DynamoMsg _ ->
             "DynamoMsg"
 
@@ -203,11 +213,17 @@ customLogger msg =
         AllPackagesLoaded _ ->
             "AllPackagesLoaded"
 
-        ProvideJobDetails _ ->
+        SaveJobState _ _ ->
+            "SaveJobState"
+
+        ProvideJobDetails _ _ _ ->
             "ProvideJobDetails"
 
         SavedSeqNoState _ ->
             "SavedSeqNoState"
+
+        MarkJobComplete _ _ _ ->
+            "MarkJobComplete"
 
 
 update : Msg -> Conn -> ( Conn, Cmd Msg )
@@ -217,6 +233,9 @@ update msg conn =
             Debug.log "update" (customLogger msg)
     in
     case msg of
+        Noop ->
+            ( conn, Cmd.none )
+
         DynamoMsg innerMsg ->
             let
                 ( nextConn, dynamoCmd ) =
@@ -390,12 +409,31 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        ProvideJobDetails loadResult ->
+        SaveJobState markerRecord loadResult ->
             case loadResult of
                 Dynamo.GetItemNotFound ->
                     respond ( 404, Body.text "No job." ) conn
 
-                Dynamo.GetItem { seq, fqPackage } ->
+                Dynamo.GetItem rootSiteImportRecord ->
+                    ( conn
+                    , withTimestamp
+                        (\posix ->
+                            MarkersQueries.save
+                                { markerRecord
+                                    | processing = markerRecord.processedTo + 1
+                                    , updatedAt = posix
+                                }
+                                (ProvideJobDetails markerRecord rootSiteImportRecord)
+                                conn
+                        )
+                    )
+
+                Dynamo.GetError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        ProvideJobDetails markerRecord { seq, fqPackage } putResult ->
+            case putResult of
+                Dynamo.PutOk ->
                     let
                         job =
                             { seq = seq
@@ -425,7 +463,7 @@ update msg conn =
                     in
                     respond ( 200, Body.json (encodeBuildJob job) ) conn
 
-                Dynamo.GetError dbErrorMsg ->
+                Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
 
         SavedSeqNoState res ->
@@ -433,6 +471,26 @@ update msg conn =
                 Dynamo.PutOk ->
                     ( conn, Cmd.none )
                         |> andThen createdOk
+
+                Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
+
+        MarkJobComplete seq posix res ->
+            case res of
+                Dynamo.PutOk ->
+                    MarkersQueries.get "package-elm-org"
+                        (GetMarkerAndThen
+                            (\record innerConn ->
+                                MarkersQueries.save
+                                    { record
+                                        | processedTo = seq
+                                        , updatedAt = posix
+                                    }
+                                    SavedSeqNoState
+                                    conn
+                            )
+                        )
+                        conn
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn
@@ -493,7 +551,7 @@ updateAsReady seq record conn =
                         elmJson
                         packageUrl
                         md5
-                        SavedSeqNoState
+                        (MarkJobComplete seq posix)
                         conn
                 )
             )
@@ -506,7 +564,7 @@ updateAsReady seq record conn =
                         seq
                         record.fqPackage
                         (StatusTable.ErrorElmJsonInvalid decodeErrMsg)
-                        SavedSeqNoState
+                        (MarkJobComplete seq posix)
                         conn
                 )
             )
@@ -528,7 +586,7 @@ updateAsError seq record conn =
                         seq
                         record.fqPackage
                         errorReason
-                        SavedSeqNoState
+                        (MarkJobComplete seq posix)
                         conn
                 )
             )
