@@ -12,20 +12,36 @@ import sys
 import time
 
 
-def zip_file_md5(archive):
+def zip_file_sha1(archive):
     """
     Calculate the MD5 of the .zip file contents.
     """
     blocksize = 1024**2  # 1M chunks
-    for fname in archive.namelist():
+
+    all_files = [x for x in archive.namelist() if not x.endswith('/')]
+
+    all_file_sha1s = []
+    for fname in all_files:
         entry = archive.open(fname)
-        md5 = hashlib.md5()
+        sha1 = hashlib.sha1()
         while True:
             block = entry.read(blocksize)
             if not block:
                 break
-            md5.update(block)
-    return md5.hexdigest()
+            sha1.update(block)
+        all_file_sha1s.append(fname + " " + sha1.hexdigest())
+
+    all_file_sha1s.sort()
+    contents_sha1 = hashlib.sha1()
+    contents_sha1.update("\n".join(all_file_sha1s).encode("utf-8"))
+
+    # while True:
+    #     block = archive.read(blocksize)
+    #     if not block:
+    #         break
+    #     sha1.update(block)
+
+    return contents_sha1.hexdigest()
 
 
 def getFilename_fromCd(cd):
@@ -228,7 +244,7 @@ while True:
                         base_dir=packageName + "-" + version)
 
     with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
-        zip_hash = zip_file_md5(zip_ref)
+        zip_hash = zip_file_sha1(zip_ref)
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
@@ -270,7 +286,7 @@ while True:
                         base_dir=packageName + "-" + version)
 
     with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
-        zip_hash = zip_file_md5(zip_ref)
+        zip_hash = zip_file_sha1(zip_ref)
 
     # Copy the package .zip onto its S3 location.
 
