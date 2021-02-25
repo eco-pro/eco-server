@@ -12,36 +12,41 @@ import sys
 import time
 
 
-def zip_file_sha1(archive):
+def calc_zip_file_sha1(zip_file_name):
     """
     Calculate the MD5 of the .zip file contents.
     """
     blocksize = 1024**2  # 1M chunks
 
-    all_files = [x for x in archive.namelist() if not x.endswith('/')]
+    # Calculate the sha1 of all files in the archive, ignore directories.
+    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as archive:
+        all_files = [x for x in archive.namelist() if not x.endswith('/')]
+        all_file_sha1s = []
+        for fname in all_files:
+            entry = archive.open(fname)
+            sha1 = hashlib.sha1()
+            while True:
+                block = entry.read(blocksize)
+                if not block:
+                    break
+                sha1.update(block)
+            all_file_sha1s.append(fname + " " + sha1.hexdigest())
 
-    all_file_sha1s = []
-    for fname in all_files:
-        entry = archive.open(fname)
-        sha1 = hashlib.sha1()
-        while True:
-            block = entry.read(blocksize)
-            if not block:
-                break
-            sha1.update(block)
-        all_file_sha1s.append(fname + " " + sha1.hexdigest())
-
+    # Calculate a sha1 over all file sha1s, sorted by filename.
     all_file_sha1s.sort()
     contents_sha1 = hashlib.sha1()
     contents_sha1.update("\n".join(all_file_sha1s).encode("utf-8"))
 
-    # while True:
-    #     block = archive.read(blocksize)
-    #     if not block:
-    #         break
-    #     sha1.update(block)
+    # Calculate a sha1 over the .zip file itself
+    zip_file_sha1 = hashlib.sha1()
+    with open(packageName + "-" + version + ".zip", 'rb') as f:
+        while True:
+            block = f.read(blocksize)
+            if not block:
+                break
+        zip_file_sha1.update(block)
 
-    return contents_sha1.hexdigest()
+    return zip_file_sha1.hexdigest(), contents_sha1.hexdigest()
 
 
 def getFilename_fromCd(cd):
@@ -69,7 +74,7 @@ def report_error(seq, reason):
         quit()
 
 
-def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip_hash):
+def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip_hash, content_hash):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
@@ -81,7 +86,7 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip
                                "jsonReportUrl": jsonReportUrl,
                                "url": "http://packages.eco-pro.org/blah",
                                "sha1ZipArchive": zip_hash,
-                               "sha1PackageContents": zip_hash})
+                               "sha1PackageContents": content_hash})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting compile error.")
@@ -139,7 +144,7 @@ def is_elm_package_file(pathname):
         return False
 
 
-def compile_elm(author, packageName, version, zip_hash, workingDir=None):
+def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir=None):
     print("Compile with Elm 0.19.1")
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -175,10 +180,13 @@ def compile_elm(author, packageName, version, zip_hash, workingDir=None):
         errorJson = {key: errorJson[key]
                      for key in keysToKeep if key in errorJson}
 
-        report_compile_error(seq, "0.19.1", errorJson,
-                             "http://buildlogs.s3.log/" + log_file_name,
-                             "http://buildlogs.s3.log/" + json_report_file_name,
-                             zip_hash)
+        report_compile_error(seq = seq,
+                             version = "0.19.1",
+                             errors = errorJson,
+                             compileLogUrl = "http://buildlogs.s3.log/" + log_file_name,
+                             jsonReportUrl = "http://buildlogs.s3.log/" + json_report_file_name,
+                             zip_hash = zip_hash,
+                             content_hash = content_hash)
         return False
 
     print("Compiled Ok.")
@@ -243,8 +251,8 @@ while True:
                         root_dir=author,
                         base_dir=packageName + "-" + version)
 
-    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
-        zip_hash = zip_file_sha1(zip_ref)
+    zip_hash, content_hash = calc_zip_file_sha1(
+        packageName + "-" + version + ".zip")
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
@@ -258,11 +266,11 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm(author, packageName, version, zip_hash, workingDir) == False:
+                if compile_elm(author, packageName, version, zip_hash, content_hash, workingDir) == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm(author, packageName, version, zip_hash, workingDir) == False:
+                if compile_elm(author, packageName, version, zip_hash, content_hash, workingDir) == False:
                     continue
 
             else:
@@ -277,17 +285,6 @@ while True:
         report_error(seq, "not-elm-package")
         continue
 
-    # Build a .zip of the minimized package.
-    print("Building the canonical Elm package as a .zip file.")
-
-    shutil.make_archive(base_name=packageName + "-" + version,
-                        format='zip',
-                        root_dir=author,
-                        base_dir=packageName + "-" + version)
-
-    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
-        zip_hash = zip_file_sha1(zip_ref)
-
     # Copy the package .zip onto its S3 location.
 
     print("Copying the package onto S3...")
@@ -301,6 +298,6 @@ while True:
              json={"elmJson": data,
                    "url": "http://packages.eco-pro.org/blah",
                    "sha1ZipArchive": zip_hash,
-                   "sha1PackageContents": zip_hash})
+                   "sha1PackageContents": content_hash})
 
     print("Job done. Try looking for the next job...")
