@@ -53,7 +53,7 @@ def report_error(seq, reason):
         quit()
 
 
-def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl):
+def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip_hash):
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
@@ -64,8 +64,8 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl):
                                "compileLogUrl": compileLogUrl,
                                "jsonReportUrl": jsonReportUrl,
                                "url": "http://packages.eco-pro.org/blah",
-                               "sha1ZipArchive": "zip_hash",
-                               "sha1PackageContents": "zip_hash"})
+                               "sha1ZipArchive": zip_hash,
+                               "sha1PackageContents": zip_hash})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting compile error.")
@@ -123,7 +123,7 @@ def is_elm_package_file(pathname):
         return False
 
 
-def compile_elm(author, packageName, version, workingDir=None):
+def compile_elm(author, packageName, version, zip_hash, workingDir=None):
     print("Compile with Elm 0.19.1")
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
@@ -161,7 +161,8 @@ def compile_elm(author, packageName, version, workingDir=None):
 
         report_compile_error(seq, "0.19.1", errorJson,
                              "http://buildlogs.s3.log/" + log_file_name,
-                             "http://buildlogs.s3.log/" + json_report_file_name)
+                             "http://buildlogs.s3.log/" + json_report_file_name,
+                             zip_hash)
         return False
 
     print("Compiled Ok.")
@@ -218,6 +219,17 @@ while True:
 
     os.remove(filename)
 
+    # Build a .zip of the minimized package.
+    print("Building the canonical Elm package as a .zip file.")
+
+    shutil.make_archive(base_name=packageName + "-" + version,
+                        format='zip',
+                        root_dir=author,
+                        base_dir=packageName + "-" + version)
+
+    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
+        zip_hash = zip_file_md5(zip_ref)
+
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
 
@@ -230,11 +242,11 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm(author, packageName, version, workingDir) == False:
+                if compile_elm(author, packageName, version, zip_hash, workingDir) == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm(author, packageName, version, workingDir) == False:
+                if compile_elm(author, packageName, version, zip_hash, workingDir) == False:
                     continue
 
             else:
