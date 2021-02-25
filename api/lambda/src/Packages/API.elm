@@ -586,7 +586,7 @@ jsonError json conn =
 updateAsReady : Int -> RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )
 updateAsReady seq record conn =
     case decodeJsonBody successReportDecoder conn of
-        Ok { elmJson, packageUrl, md5 } ->
+        Ok { elmJson, archive } ->
             ( conn
             , withTimestamp
                 (\posix ->
@@ -594,8 +594,7 @@ updateAsReady seq record conn =
                         seq
                         record.fqPackage
                         elmJson
-                        packageUrl
-                        md5
+                        archive
                         (MarkJobComplete seq posix)
                         conn
                 )
@@ -620,7 +619,7 @@ updateAsError seq record conn =
     let
         errorMsgResult =
             decodeJsonBody errorReportDecoder conn
-                |> Result.mapError (always StatusTable.ErrorOther)
+                |> Result.mapError StatusTable.ErrorOther
     in
     case errorMsgResult of
         Ok errorReason ->
@@ -672,8 +671,7 @@ encodeBuildJob val =
 
 type alias SuccessReport =
     { elmJson : Elm.Project.Project
-    , packageUrl : Url
-    , md5 : String
+    , archive : StatusTable.Archive
     }
 
 
@@ -681,8 +679,7 @@ successReportDecoder : Decoder SuccessReport
 successReportDecoder =
     Decode.succeed SuccessReport
         |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
-        |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
-        |> decodeAndMap (Decode.field "md5" Decode.string)
+        |> decodeAndMap StatusTable.archiveDecoder
 
 
 

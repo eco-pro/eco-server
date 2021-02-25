@@ -47,12 +47,11 @@ saveReady :
     -> Int
     -> FQPackage
     -> Elm.Project.Project
-    -> Url
-    -> String
+    -> StatusTable.Archive
     -> (Dynamo.PutResponse -> msg)
     -> Conn Config model route msg
     -> ( Conn Config model route msg, Cmd msg )
-saveReady timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
+saveReady timestamp seq fqPackage elmJson archive responseFn conn =
     save
         { seq = seq
         , updatedAt = timestamp
@@ -60,8 +59,7 @@ saveReady timestamp seq fqPackage elmJson packageUrl md5 responseFn conn =
             StatusTable.Ready
                 { fqPackage = fqPackage
                 , elmJson = elmJson
-                , packageUrl = packageUrl
-                , md5 = md5
+                , archive = archive
                 }
         }
         responseFn

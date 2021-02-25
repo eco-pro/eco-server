@@ -1,11 +1,14 @@
 module DB.BuildStatus.Table exposing
-    ( ErrorReason(..)
+    ( Archive
+    , ErrorReason(..)
     , Key
     , Label(..)
     , Record
     , Status(..)
+    , archiveDecoder
     , decoder
     , encode
+    , encodeArchive
     , encodeErrorReason
     , encodeKey
     , errorReasonDecoder
@@ -26,13 +29,19 @@ type Status
     = Ready
         { fqPackage : FQPackage
         , elmJson : Project
-        , packageUrl : Url
-        , md5 : String
+        , archive : Archive
         }
     | Error
         { fqPackage : FQPackage
         , errorReason : ErrorReason
         }
+
+
+type alias Archive =
+    { url : Url
+    , sha1ZipArchive : String
+    , sha1PackageContents : String
+    }
 
 
 type ErrorReason
@@ -41,8 +50,14 @@ type ErrorReason
     | ErrorElmJsonInvalid String
     | ErrorNotElmPackage
     | ErrorUnsupportedElmVersion
-    | ErrorCompileFailed Version Value Url
-    | ErrorOther
+    | ErrorCompileFailed
+        { compilerVersion : Version
+        , reportJson : Value
+        , compileLogUrl : Url
+        , jsonReportUrl : Url
+        , archive : Archive
+        }
+    | ErrorOther String
 
 
 type Label
@@ -101,12 +116,11 @@ labelToString label =
 encodeStatus : Status -> List ( String, Value )
 encodeStatus status =
     case status of
-        Ready { fqPackage, elmJson, packageUrl, md5 } ->
+        Ready { fqPackage, elmJson, archive } ->
             [ ( "fqPackage", FQPackage.encode fqPackage )
             , ( "elmJson", Elm.Project.encode elmJson )
-            , ( "packageUrl", encodeUrl packageUrl )
-            , ( "md5", Encode.string md5 )
             ]
+                ++ encodeArchive archive
 
         Error { fqPackage, errorReason } ->
             [ ( "fqPackage", FQPackage.encode fqPackage )
@@ -134,15 +148,27 @@ encodeErrorReason reason =
         ErrorUnsupportedElmVersion ->
             [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
 
-        ErrorCompileFailed version compileErrors compileLogUrl ->
+        ErrorCompileFailed { compilerVersion, reportJson, compileLogUrl, jsonReportUrl, archive } ->
             [ ( "errorReason", Encode.string "compile-failed" )
-            , ( "compilerVersion", Elm.Version.encode version )
-            , ( "compileErrors", compileErrors )
+            , ( "compilerVersion", Elm.Version.encode compilerVersion )
+            , ( "reportJson", reportJson )
             , ( "compileLogUrl", encodeUrl compileLogUrl )
+            , ( "jsonReportUrl", encodeUrl jsonReportUrl )
+            ]
+                ++ encodeArchive archive
+
+        ErrorOther val ->
+            [ ( "errorReason", Encode.string "other" )
+            , ( "errorMsg", Encode.string val )
             ]
 
-        ErrorOther ->
-            [ ( "errorReason", Encode.string "other" ) ]
+
+encodeArchive : Archive -> List ( String, Value )
+encodeArchive archive =
+    [ ( "url", encodeUrl archive.url )
+    , ( "sha1ZipArchive", Encode.string archive.sha1ZipArchive )
+    , ( "sha1PackageContents", Encode.string archive.sha1PackageContents )
+    ]
 
 
 decoder : Decoder Record
@@ -161,18 +187,16 @@ statusDecoder =
                 case label of
                     "ready" ->
                         Decode.succeed
-                            (\fqp elmJson packageUrl md5 ->
+                            (\fqp elmJson archive ->
                                 Ready
                                     { fqPackage = fqp
                                     , elmJson = elmJson
-                                    , packageUrl = packageUrl
-                                    , md5 = md5
+                                    , archive = archive
                                     }
                             )
                             |> decodeAndMap (Decode.field "fqPackage" FQPackage.decoder)
                             |> decodeAndMap (Decode.field "elmJson" Elm.Project.decoder)
-                            |> decodeAndMap (Decode.field "packageUrl" decodeUrl)
-                            |> decodeAndMap (Decode.field "md5" Decode.string)
+                            |> decodeAndMap archiveDecoder
 
                     _ ->
                         Decode.succeed
@@ -211,16 +235,36 @@ errorReasonDecoder =
 
                     "compile-failed" ->
                         Decode.succeed
-                            (\compilerVersion compileErrors ->
-                                ErrorCompileFailed compilerVersion compileErrors
+                            (\compilerVersion reportJson compileLogUrl jsonReportUrl archive ->
+                                ErrorCompileFailed
+                                    { compilerVersion = compilerVersion
+                                    , reportJson = reportJson
+                                    , compileLogUrl = compileLogUrl
+                                    , jsonReportUrl = jsonReportUrl
+                                    , archive = archive
+                                    }
                             )
                             |> decodeAndMap (Decode.field "compilerVersion" Elm.Version.decoder)
-                            |> decodeAndMap (Decode.field "compileErrors" Decode.value)
+                            |> decodeAndMap (Decode.field "reportJson" Decode.value)
                             |> decodeAndMap (Decode.field "compileLogUrl" decodeUrl)
+                            |> decodeAndMap (Decode.field "jsonReportUrl" decodeUrl)
+                            |> decodeAndMap archiveDecoder
+
+                    "other" ->
+                        Decode.succeed ErrorOther
+                            |> decodeAndMap (Decode.field "errorMsg" Decode.string)
 
                     _ ->
-                        Decode.succeed ErrorOther
+                        Decode.fail "Unknown errorReason."
             )
+
+
+archiveDecoder : Decoder Archive
+archiveDecoder =
+    Decode.succeed Archive
+        |> decodeAndMap (Decode.field "url" decodeUrl)
+        |> decodeAndMap (Decode.field "sha1ZipArchive" Decode.string)
+        |> decodeAndMap (Decode.field "sha1PackageContents" Decode.string)
 
 
 encodeKey : Key -> Value

@@ -60,9 +60,12 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl):
     errorResp = req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/error",
                          json={"errorReason": "compile-failed",
                                "compilerVersion": version,
-                               "compileErrors": errors,
+                               "reportJson": errors,
                                "compileLogUrl": compileLogUrl,
-                               "jsonReportUrl": jsonReportUrl})
+                               "jsonReportUrl": jsonReportUrl,
+                               "url": "http://packages.eco-pro.org/blah",
+                               "sha1ZipArchive": "zip_hash",
+                               "sha1PackageContents": "zip_hash"})
 
     if errorResp.status_code == 500:
         print("Server error whilst reporting compile error.")
@@ -208,7 +211,6 @@ while True:
     print("Got " + filename + ", unpacking...")
 
     with zipfile.ZipFile(filename, "r") as zip_ref:
-        zip_hash = zip_file_md5(zip_ref)
         zipnames = zip_ref.namelist()
         filterednames = [n for n in zipnames if is_elm_package_file(n)]
         for zipname in filterednames:
@@ -255,6 +257,9 @@ while True:
                         root_dir=author,
                         base_dir=packageName + "-" + version)
 
+    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as zip_ref:
+        zip_hash = zip_file_md5(zip_ref)
+
     # Copy the package .zip onto its S3 location.
 
     print("Copying the package onto S3...")
@@ -266,7 +271,8 @@ while True:
     print("Letting the package server know where to find it...")
     req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/ready",
              json={"elmJson": data,
-                   "packageUrl": "http://packages.eco-pro.org/blah",
-                   "md5": zip_hash})
+                   "url": "http://packages.eco-pro.org/blah",
+                   "sha1ZipArchive": zip_hash,
+                   "sha1PackageContents": zip_hash})
 
     print("Job done. Try looking for the next job...")
