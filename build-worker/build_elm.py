@@ -14,7 +14,12 @@ import time
 
 def calc_zip_file_sha1(zip_file_name):
     """
-    Calculate the MD5 of the .zip file contents.
+    Calculate a hash of the .zip file and over its contents.
+    To calculate the contents hash, each file in the .zip is hashed,
+    the filenames followed by their hashes are sorted into a string,
+    with each filename starting a new line. This string is then hashed
+    to get an overall hash of the .zip file contents in a repeatable
+    way.
     """
     blocksize = 1024**2  # 1M chunks
 
