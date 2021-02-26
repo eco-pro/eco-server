@@ -12,6 +12,7 @@ module DB.BuildStatus.Table exposing
     , encodeErrorReason
     , encodeKey
     , errorReasonDecoder
+    , getElmJson
     , labelToString
     )
 
@@ -273,6 +274,16 @@ encodeKey record =
         [ ( "label", labelToString record.label |> Encode.string )
         , ( "seq", Encode.int record.seq )
         ]
+
+
+getElmJson : Record -> Maybe Project
+getElmJson record =
+    case record.status of
+        Ready { elmJson } ->
+            Just elmJson
+
+        _ ->
+            Nothing
 
 
 

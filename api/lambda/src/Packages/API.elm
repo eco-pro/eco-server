@@ -126,7 +126,10 @@ router conn =
                 conn
 
         ( GET, ElmJson author name version ) ->
-            ( conn, RootSite.fetchElmJson PassthroughElmJson author name version )
+            --( conn, RootSite.fetchElmJson BuildStatusForElmJson author name version )
+            FQPackage.fromStringParts author name version
+                |> Maybe.map (\fqPackage -> StatusQueries.getPackage fqPackage BuildStatusForElmJson conn)
+                |> Maybe.withDefault (respond ( 400, Body.text "Bad Package Reference" ) conn)
 
         ( GET, EndpointJson author name version ) ->
             ( conn, RootSite.fetchEndpointJson PassthroughEndpointJson author name version )
@@ -166,7 +169,7 @@ type Msg
     | TimestampAndThen (Posix -> ( Conn, Cmd Msg )) Posix
     | GetRootSiteImportAndThen (RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse RootSiteImportsTable.Record)
     | GetMarkerAndThen (MarkersTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse MarkersTable.Record)
-    | PassthroughElmJson (Result Http.Error Decode.Value)
+    | BuildStatusForElmJson (Dynamo.QueryResponse StatusTable.Record)
     | PassthroughEndpointJson (Result Http.Error Decode.Value)
     | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
     | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
@@ -199,8 +202,8 @@ customLogger msg =
         GetMarkerAndThen _ _ ->
             "GetMarkerAndThen"
 
-        PassthroughElmJson _ ->
-            "PassthroughElmJson"
+        BuildStatusForElmJson _ ->
+            "BuildStatusForElmJson"
 
         PassthroughEndpointJson _ ->
             "PassthroughEndpointJson"
@@ -265,13 +268,18 @@ update msg conn =
         GetMarkerAndThen recordFn getResponse ->
             withDynamoGet recordFn getResponse conn
 
-        PassthroughElmJson result ->
+        BuildStatusForElmJson result ->
             case result of
-                Ok val ->
-                    respond ( 200, Body.json val ) conn
+                Dynamo.BatchGetItems (status :: _) ->
+                    StatusTable.getElmJson status
+                        |> Maybe.map (\project -> respond ( 200, Body.json (Elm.Project.encode project) ) conn)
+                        |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Err _ ->
-                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+                Dynamo.BatchGetItems [] ->
+                    respond ( 404, Body.empty ) conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
 
         PassthroughEndpointJson result ->
             case result of

@@ -1,10 +1,12 @@
 module DB.BuildStatus.Queries exposing
-    ( getPackagesSince
+    ( getPackage
+    , getPackagesSince
     , saveError
     , saveReady
     )
 
 import AWS.Dynamo as Dynamo
+import DB.BuildStatus.ByFQPackageIndex as FQPackageIndex
 import DB.BuildStatus.Table as StatusTable
 import DB.TableNames as TableNames
 import Elm.Project
@@ -18,6 +20,11 @@ import Url exposing (Url)
 ecoBuildStatusTableName : Conn Config model route msg -> String
 ecoBuildStatusTableName conn =
     TableNames.fqTableName "eco-buildstatus" conn
+
+
+ecoBuildStatusByFQPackageIndexName : Conn Config model route msg -> String
+ecoBuildStatusByFQPackageIndexName conn =
+    TableNames.fqTableName "eco-buildstatus-byfqpackage" conn
 
 
 saveError :
@@ -94,6 +101,25 @@ getPackagesSince seq label responseFn conn =
     in
     Dynamo.query
         (ecoBuildStatusTableName conn)
+        query
+        StatusTable.decoder
+        responseFn
+        conn
+
+
+getPackage :
+    FQPackage
+    -> (Dynamo.QueryResponse StatusTable.Record -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+getPackage fqPackage responseFn conn =
+    let
+        query =
+            Dynamo.partitionKeyEquals "fqPackage" (FQPackage.toString fqPackage)
+    in
+    Dynamo.queryIndex
+        (ecoBuildStatusTableName conn)
+        (ecoBuildStatusByFQPackageIndexName conn)
         query
         StatusTable.decoder
         responseFn

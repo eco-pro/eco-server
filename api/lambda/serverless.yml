@@ -59,6 +59,8 @@ resources:
             AttributeType: S
           - AttributeName: seq
             AttributeType: N
+          - AttributeName: fqPackage
+            AttributeType: S
         KeySchema:
           - AttributeName: label
             KeyType: HASH
@@ -68,6 +70,16 @@ resources:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus-byfqpackage
+            KeySchema:
+              - AttributeName: fqPackage
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
 
     MarkersTable:
       Type: 'AWS::DynamoDB::Table'

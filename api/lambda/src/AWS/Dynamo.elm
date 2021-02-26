@@ -5,7 +5,7 @@ port module AWS.Dynamo exposing
     , batchGet, BatchGetResponse(..)
     , batchPut
     , updateKey
-    , Query, QueryResponse, Order(..), query, partitionKeyEquals, limitResults, orderResults
+    , Query, QueryResponse, Order(..), query, queryIndex, partitionKeyEquals, limitResults, orderResults
     , rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
     , rangeKeyGreaterThanOrEqual, rangeKeyBetween
     , int, string
@@ -32,7 +32,7 @@ port module AWS.Dynamo exposing
 
 # Database Queries
 
-@docs Query, QueryResponse, Order, query, partitionKeyEquals, limitResults, orderResults
+@docs Query, QueryResponse, Order, query, queryIndex, partitionKeyEquals, limitResults, orderResults
 @docs rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
 @docs rangeKeyGreaterThanOrEqual, rangeKeyBetween
 @docs int, string
@@ -678,13 +678,29 @@ query :
 query table q decoder responseFn conn =
     Serverless.interop
         dynamoQueryPort
-        (queryEncoder table q)
+        (queryEncoder table Nothing q)
         (queryResponseDecoder decoder >> responseFn)
         conn
 
 
-queryEncoder : String -> Query -> Value
-queryEncoder table q =
+queryIndex :
+    String
+    -> String
+    -> Query
+    -> Decoder a
+    -> (QueryResponse a -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+queryIndex table index q decoder responseFn conn =
+    Serverless.interop
+        dynamoQueryPort
+        (queryEncoder table (Just index) q)
+        (queryResponseDecoder decoder >> responseFn)
+        conn
+
+
+queryEncoder : String -> Maybe String -> Query -> Value
+queryEncoder table maybeIndex q =
     let
         ( keyExpressionsString, attrVals ) =
             [ Equals q.partitionKeyName q.partitionKeyValue |> Just
@@ -697,6 +713,7 @@ queryEncoder table q =
             Encode.object attrVals
     in
     [ ( "TableName", Encode.string table ) |> Just
+    , Maybe.map (\index -> ( "IndexName", Encode.string index )) maybeIndex
     , ( "KeyConditionExpression", Encode.string keyExpressionsString ) |> Just
     , ( "ExpressionAttributeValues", encodedAttrVals ) |> Just
     , case q.order of

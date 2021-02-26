@@ -3,6 +3,7 @@ module Packages.FQPackage exposing
     , decoder
     , encode
     , fromString
+    , fromStringParts
     , toString
     )
 
@@ -16,6 +17,11 @@ type alias FQPackage =
     { name : Elm.Package.Name
     , version : Elm.Version.Version
     }
+
+
+fromStringParts : String -> String -> String -> Maybe FQPackage
+fromStringParts author name version =
+    fromString (author ++ "/" ++ name ++ "@" ++ version)
 
 
 fromString : String -> Maybe FQPackage
