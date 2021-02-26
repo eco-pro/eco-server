@@ -10,6 +10,9 @@ import pathlib
 import shutil
 import sys
 import time
+import logging
+import boto3
+from botocore.exceptions import ClientError
 
 
 def calc_zip_file_sha1(zip_file_name):
@@ -200,6 +203,28 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
 
     return True
 
+def upload_file(file_name, bucket, object_name=None):
+    """Upload a file to an S3 bucket
+
+    :param file_name: File to upload
+    :param bucket: Bucket to upload to
+    :param object_name: S3 object name. If not specified then file_name is used
+    :return: True if file was uploaded, else False
+    """
+
+    # If S3 object_name was not specified, use file_name
+    if object_name is None:
+        object_name = file_name
+
+    # Upload the file
+    s3_client = boto3.client('s3')
+    try:
+        response = s3_client.upload_file(file_name, bucket, object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
+
 
 print("=== Eco-Server Elm Package Build Script ===")
 
@@ -256,8 +281,8 @@ while True:
                         root_dir=author,
                         base_dir=packageName + "-" + version)
 
-    zip_hash, content_hash = calc_zip_file_sha1(
-        packageName + "-" + version + ".zip")
+    archive_name = packageName + "-" + version + ".zip"
+    zip_hash, content_hash = calc_zip_file_sha1(archive_name)
 
     # Extract the elm.json, and POST it to the package server.
     print("Is it an Elm 19 project? Skip if not.")
@@ -294,7 +319,7 @@ while True:
 
     print("Copying the package onto S3...")
 
-    # aws s3 cp ./${OUTPUT_THUMBS_FILE_NAME} s3://${OUTPUT_S3_PATH}/${OUTPUT_THUMBS_FILE_NAME} --region ${AWS_REGION}
+    upload_file(archive_name, "elm-packages")
 
     # POST to the package server to tell it the job is complete.
 
