@@ -318,8 +318,7 @@ while True:
     # Copy the package .zip onto its S3 location.
 
     print("Copying the package onto S3...")
-
-    upload_file(archive_name, "elm-packages")
+    # upload_file(archive_name, "elm-packages")
 
     # POST to the package server to tell it the job is complete.
 
