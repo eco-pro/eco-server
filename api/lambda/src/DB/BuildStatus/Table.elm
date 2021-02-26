@@ -12,6 +12,7 @@ module DB.BuildStatus.Table exposing
     , encodeErrorReason
     , encodeKey
     , errorReasonDecoder
+    , getArchive
     , getElmJson
     , labelToString
     )
@@ -284,6 +285,21 @@ getElmJson record =
 
         _ ->
             Nothing
+
+
+getArchive : Record -> Maybe Archive
+getArchive record =
+    case record.status of
+        Ready { archive } ->
+            Just archive
+
+        Error { errorReason } ->
+            case errorReason of
+                ErrorCompileFailed { archive } ->
+                    Just archive
+
+                _ ->
+                    Nothing
 
 
 

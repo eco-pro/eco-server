@@ -126,13 +126,14 @@ router conn =
                 conn
 
         ( GET, ElmJson author name version ) ->
-            --( conn, RootSite.fetchElmJson BuildStatusForElmJson author name version )
             FQPackage.fromStringParts author name version
                 |> Maybe.map (\fqPackage -> StatusQueries.getPackage fqPackage BuildStatusForElmJson conn)
                 |> Maybe.withDefault (respond ( 400, Body.text "Bad Package Reference" ) conn)
 
         ( GET, EndpointJson author name version ) ->
-            ( conn, RootSite.fetchEndpointJson PassthroughEndpointJson author name version )
+            FQPackage.fromStringParts author name version
+                |> Maybe.map (\fqPackage -> StatusQueries.getPackage fqPackage BuildStatusForEndpoint conn)
+                |> Maybe.withDefault (respond ( 400, Body.text "Bad Package Reference" ) conn)
 
         -- The root site build job API
         ( GET, Refresh ) ->
@@ -170,7 +171,7 @@ type Msg
     | GetRootSiteImportAndThen (RootSiteImportsTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse RootSiteImportsTable.Record)
     | GetMarkerAndThen (MarkersTable.Record -> Conn -> ( Conn, Cmd Msg )) (Dynamo.GetResponse MarkersTable.Record)
     | BuildStatusForElmJson (Dynamo.QueryResponse StatusTable.Record)
-    | PassthroughEndpointJson (Result Http.Error Decode.Value)
+    | BuildStatusForEndpoint (Dynamo.QueryResponse StatusTable.Record)
     | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
     | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
     | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
@@ -205,8 +206,8 @@ customLogger msg =
         BuildStatusForElmJson _ ->
             "BuildStatusForElmJson"
 
-        PassthroughEndpointJson _ ->
-            "PassthroughEndpointJson"
+        BuildStatusForEndpoint _ ->
+            "BuildStatusForEndpoint"
 
         CheckSeqNo _ ->
             "CheckSeqNo"
@@ -272,7 +273,14 @@ update msg conn =
             case result of
                 Dynamo.BatchGetItems (status :: _) ->
                     StatusTable.getElmJson status
-                        |> Maybe.map (\project -> respond ( 200, Body.json (Elm.Project.encode project) ) conn)
+                        |> Maybe.map
+                            (\project ->
+                                respond
+                                    ( 200
+                                    , Body.json (Elm.Project.encode project)
+                                    )
+                                    conn
+                            )
                         |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
                 Dynamo.BatchGetItems [] ->
@@ -281,13 +289,30 @@ update msg conn =
                 Dynamo.BatchGetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        PassthroughEndpointJson result ->
+        BuildStatusForEndpoint result ->
             case result of
-                Ok val ->
-                    respond ( 200, Body.json val ) conn
+                Dynamo.BatchGetItems (status :: _) ->
+                    StatusTable.getArchive status
+                        |> Maybe.map
+                            (\archive ->
+                                respond
+                                    ( 200
+                                    , Body.json
+                                        (encodeEndpoint
+                                            { url = archive.url
+                                            , hash = archive.sha1ZipArchive
+                                            }
+                                        )
+                                    )
+                                    conn
+                            )
+                        |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Err _ ->
-                    respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
+                Dynamo.BatchGetItems [] ->
+                    respond ( 404, Body.empty ) conn
+
+                Dynamo.BatchGetError dbErrorMsg ->
+                    error dbErrorMsg conn
 
         CheckSeqNo loadResult ->
             case loadResult of
@@ -704,6 +729,24 @@ errorReportDecoder =
 
 
 
+-- Package Endpoint
+
+
+type alias Endpoint =
+    { url : Url
+    , hash : String
+    }
+
+
+encodeEndpoint : Endpoint -> Value
+encodeEndpoint endpoint =
+    Encode.object
+        [ ( "url", encodeUrl endpoint.url )
+        , ( "hash", Encode.string endpoint.hash )
+        ]
+
+
+
 -- Helpers
 
 
@@ -725,6 +768,12 @@ decodeUrl =
                     Just val ->
                         Decode.succeed val
             )
+
+
+encodeUrl : Url -> Value
+encodeUrl url =
+    Url.toString url
+        |> Encode.string
 
 
 decodeJsonBody : Decoder a -> Conn.Conn config model route msg -> Result String a
