@@ -335,7 +335,7 @@ while True:
     print("Letting the package server know where to find it...")
     req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/ready",
              json={"elmJson": data,
-                   "url": "http://packages.eco-pro.org/blah",
+                   "url": "http://localhost:4569/elm-packages/" + archive_name,
                    "sha1ZipArchive": zip_hash,
                    "sha1PackageContents": content_hash})
 
