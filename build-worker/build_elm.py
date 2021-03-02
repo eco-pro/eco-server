@@ -171,7 +171,7 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
 
     print("Copying build log onto S3.")
     upload_file(log_file_name, "elm-build-logs", object_name=log_file_name)
-    os.remove(log_file_name)
+    #os.remove(log_file_name)
 
     # If compilation fails, run it again and get the JSON report.
     # The JSON report is trimmed to a summary only, the compile log should
@@ -188,7 +188,7 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
             json_report.write(errorString)
         print("Copying build report json onto S3.")
         upload_file(json_report_file_name, "elm-build-logs", object_name=json_report_file_name)
-        os.remove(json_report_file_name)
+        #os.remove(json_report_file_name)
 
         keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key]
