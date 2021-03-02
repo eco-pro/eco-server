@@ -14,8 +14,6 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
-
-
 def calc_zip_file_sha1(zip_file_name):
     """
     Calculate a hash of the .zip file and over its contents.
@@ -25,7 +23,7 @@ def calc_zip_file_sha1(zip_file_name):
     to get an overall hash of the .zip file contents in a repeatable
     way.
     """
-    blocksize = 65536 #1024**2  # 1M chunks
+    blocksize = 1024**2  # 1M chunks
 
     # Calculate the sha1 of all files in the archive, ignore directories.
     with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as archive:

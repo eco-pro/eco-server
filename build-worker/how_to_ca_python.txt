@@ -1,0 +1,18 @@
+# How to run the build.
+
+Install mitmproxy.
+
+Run mitmproxy like this:
+
+    mitmproxy --ssl-insecure -M '|https://package.elm-lang.org/|http://localhost:3000/v1/'
+
+Run the python build Script
+
+    mkdir tmp
+    cd tmp
+
+    AWS_ACCESS_KEY_ID=S3RVER \
+    AWS_SECRET_ACCESS_KEY=S3RVER \
+    https_proxy=http://127.0.0.1:8080 \
+    REQUESTS_CA_BUNDLE=~/.mitprpoxy/mitmproxy-ca-cert.pem \
+    ../build_elm.py
