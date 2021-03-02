@@ -113,7 +113,7 @@ router : Conn -> ( Conn, Cmd Msg )
 router conn =
     case ( method conn, Debug.log "route" <| route conn ) of
         -- The original package site API
-        ( GET, AllPackages ) ->
+        ( POST, AllPackages ) ->
             StatusQueries.getPackagesSince 0
                 StatusTable.LabelReady
                 ReadyPackagesLoaded
