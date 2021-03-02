@@ -15,6 +15,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 
+
 def calc_zip_file_sha1(zip_file_name):
     """
     Calculate a hash of the .zip file and over its contents.
@@ -170,6 +171,9 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
     with open(log_file_name, "w") as compile_log:
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
+    print("Copying build log onto S3.")
+    upload_file(log_file_name, "elm-build-logs", object_name=log_file_name)
+
     # If compilation fails, run it again and get the JSON report.
     # The JSON report is trimmed to a summary only, the compile log should
     # be consulted for the full details.
@@ -183,6 +187,8 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
 
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
+        print("Copying build report json onto S3.")
+        upload_file(json_report_file_name, "elm-build-logs", object_name=json_report_file_name)
 
         keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key]
@@ -217,9 +223,13 @@ def upload_file(file_name, bucket, object_name=None):
         object_name = file_name
 
     # Upload the file
-    s3_client = boto3.client('s3')
+    s3 = boto3.resource(
+      service_name = "s3",
+      endpoint_url = "http://localhost:4569",
+    )
+
     try:
-        response = s3_client.upload_file(file_name, bucket, object_name)
+        s3.Object(bucket, object_name).put(Body=open(file_name, 'rb'))
     except ClientError as e:
         logging.error(e)
         return False
@@ -318,7 +328,7 @@ while True:
     # Copy the package .zip onto its S3 location.
 
     print("Copying the package onto S3...")
-    # upload_file(archive_name, "elm-packages")
+    upload_file(archive_name, "elm-packages", object_name=archive_name)
 
     # POST to the package server to tell it the job is complete.
 

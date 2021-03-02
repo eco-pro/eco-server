@@ -45,10 +45,15 @@ functions:
 
 resources:
   Resources:
-    NewResource:
+    ElmPackagesBucket:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: elm-packages
+
+    ElmBuildLogsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: elm-build-logs
 
     BuildStatusTable:
       Type: 'AWS::DynamoDB::Table'
