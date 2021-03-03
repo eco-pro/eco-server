@@ -1,12 +1,14 @@
 # How to run the build.
 
+## Dev testing
+
 Install mitmproxy.
 
-Run mitmproxy like this:
+Run mitmproxy to intercept calls to the package.elm-lang.org site:
 
     mitmproxy --ssl-insecure -M '|https://package.elm-lang.org/|http://localhost:3000/v1/'
 
-Run the python build Script
+Run the python build script:
 
     mkdir tmp
     cd tmp
@@ -19,6 +21,13 @@ Run the python build Script
     REQUESTS_CA_BUNDLE=~/.mitmproxy/mitmproxy-ca-cert.pem \
     ../build_elm.py
 
+## Testing the Docker image
+
+The build script is dockerized as it will be run this way under Fargate.
+
+To test the docker container locally:
+
+    make
 
     docker run \
     --network="host" \
