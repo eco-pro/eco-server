@@ -131,13 +131,13 @@ router conn =
                 conn
 
         ( POST, AllPackagesSince since ) ->
-            StatusQueries.getPackagesSince (since + startElm19)
+            StatusQueries.getPackagesSince since
                 StatusTable.LabelReady
                 (ReadyPackagesSinceLoaded since)
                 conn
 
         ( GET, AllPackagesSince since ) ->
-            StatusQueries.getPackagesSince (since + startElm19)
+            StatusQueries.getPackagesSince since
                 StatusTable.LabelReady
                 (ReadyPackagesSinceLoaded since)
                 conn
@@ -191,6 +191,7 @@ type Msg
     | BuildStatusForEndpoint (Dynamo.QueryResponse StatusTable.Record)
     | CheckSeqNo (Dynamo.GetResponse MarkersTable.Record)
     | RefreshPackages MarkersTable.Record (Result Http.Error ( Posix, List FQPackage ))
+    | SkipBelowElm19Job (List RootSiteImportsTable.Record) MarkersTable.Record Posix Dynamo.PutResponse
     | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
     | ReadyPackagesSinceLoaded Int (Dynamo.QueryResponse StatusTable.Record)
     | ReadyPackagesLoaded (Dynamo.QueryResponse StatusTable.Record)
@@ -234,6 +235,9 @@ customLogger msg =
 
         PackagesSave _ _ _ ->
             "PackagesSave"
+
+        SkipBelowElm19Job _ _ _ _ ->
+            "SkipBelowElm19Job"
 
         ReadyPackagesSinceLoaded _ _ ->
             "ReadyPackagesSinceLoaded"
@@ -335,12 +339,12 @@ update msg conn =
             case loadResult of
                 Dynamo.GetItemNotFound ->
                     ( conn
-                    , RootSite.fetchAllPackagesSince startElm19
+                    , RootSite.fetchAllPackagesSince 0
                         |> Task.map2 Tuple.pair Time.now
                         |> Task.attempt
                             (RefreshPackages
                                 { source = "package-elm-org"
-                                , latest = startElm19
+                                , latest = 0
                                 , processedTo = startElm19
                                 , processing = startElm19
                                 , updatedAt = Time.millisToPosix 0
@@ -386,18 +390,51 @@ update msg conn =
                                     (RootSiteImportsQueries.saveAll
                                         timestamp
                                         packageTableEntries
-                                        (PackagesSave { record | latest = seq } timestamp)
+                                        (SkipBelowElm19Job packageTableEntries { record | latest = seq } timestamp)
                                         DynamoMsg
                                     )
 
                 Err err ->
                     respond ( 500, Body.text "Got error when trying to contact package.elm-lang.com." ) conn
 
+        SkipBelowElm19Job newPackages record timestamp res ->
+            case res of
+                Dynamo.PutOk ->
+                    let
+                        packagesBelowElm19 =
+                            newPackages
+                                |> List.filter (\{ seq } -> seq <= startElm19)
+                                |> List.map
+                                    (\{ seq, fqPackage } ->
+                                        { seq = seq
+                                        , updatedAt = timestamp
+                                        , status =
+                                            StatusTable.Error
+                                                { fqPackage = fqPackage
+                                                , errorReason = StatusTable.ErrorUnsupportedElmVersion
+                                                }
+                                        }
+                                    )
+                    in
+                    case packagesBelowElm19 of
+                        [] ->
+                            MarkersQueries.save { record | updatedAt = timestamp } SavedSeqNoState conn
+
+                        packages ->
+                            StatusQueries.saveAll
+                                timestamp
+                                packages
+                                (PackagesSave record timestamp)
+                                DynamoMsg
+                                conn
+
+                Dynamo.PutError dbErrorMsg ->
+                    error dbErrorMsg conn
+
         PackagesSave record timestamp res ->
             case res of
                 Dynamo.PutOk ->
-                    ( conn, Cmd.none )
-                        |> andThen (MarkersQueries.save { record | updatedAt = timestamp } SavedSeqNoState)
+                    MarkersQueries.save { record | updatedAt = timestamp } SavedSeqNoState conn
 
                 Dynamo.PutError dbErrorMsg ->
                     error dbErrorMsg conn

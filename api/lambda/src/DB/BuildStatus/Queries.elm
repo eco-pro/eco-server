@@ -1,6 +1,7 @@
 module DB.BuildStatus.Queries exposing
     ( getPackage
     , getPackagesSince
+    , saveAll
     , saveError
     , saveReady
     )
@@ -83,6 +84,23 @@ save record responseFn conn =
         (ecoBuildStatusTableName conn)
         StatusTable.encode
         record
+        responseFn
+        conn
+
+
+saveAll :
+    Posix
+    -> List StatusTable.Record
+    -> (Dynamo.PutResponse -> msg)
+    -> (Dynamo.Msg msg -> msg)
+    -> Conn Config model route msg
+    -> ( Conn Config model route msg, Cmd msg )
+saveAll timestamp packages responseFn dynamoMsgFn conn =
+    Dynamo.batchPut
+        (ecoBuildStatusTableName conn)
+        StatusTable.encode
+        packages
+        dynamoMsgFn
         responseFn
         conn
 
