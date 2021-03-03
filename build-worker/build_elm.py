@@ -305,10 +305,15 @@ while True:
     # Build a .zip of the minimized package.
     print("Building the canonical Elm package as a .zip file.")
 
-    shutil.make_archive(base_name=packageName + "-" + version,
-                        format='zip',
-                        root_dir=author,
-                        base_dir=packageName + "-" + version)
+    try:
+        shutil.make_archive(base_name=packageName + "-" + version,
+                            format='zip',
+                            root_dir=author,
+                            base_dir=packageName + "-" + version)
+    except FileNotFoundError:
+        print("== Error: Package renamed.")
+        report_error(seq, "package-renamed")
+        continue
 
     archive_name = packageName + "-" + version + ".zip"
     zip_hash, content_hash = calc_zip_file_sha1(archive_name)

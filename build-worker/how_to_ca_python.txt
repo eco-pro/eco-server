@@ -18,3 +18,12 @@ Run the python build Script
     https_proxy=http://127.0.0.1:8080 \
     REQUESTS_CA_BUNDLE=~/.mitmproxy/mitmproxy-ca-cert.pem \
     ../build_elm.py
+
+
+    docker run \
+    --network="host" \
+    -e AWS_ACCESS_KEY_ID=S3RVER \
+    -e AWS_SECRET_ACCESS_KEY=S3RVER \
+    -e PACKAGE_API_ROOT=http://localhost:3000/ \
+    -e S3_ENDPOINT=http://localhost:4569/ \
+    eco-pro/eco-server-build-worker:v1
