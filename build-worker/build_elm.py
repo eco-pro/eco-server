@@ -250,6 +250,7 @@ print("====== Eco-Server Elm Package Build Script ======")
 start_dir = os.getcwd()
 
 while True:
+    # time.sleep(1)
     os.chdir(start_dir)
 
     # Check on the package server what job to do next, if any.

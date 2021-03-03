@@ -34,6 +34,11 @@ import Url.Parser exposing ((</>), (<?>), int, map, oneOf, s, top)
 import Url.Parser.Query as Query
 
 
+startElm19 : Int
+startElm19 =
+    6557
+
+
 
 -- Serverless program.
 
@@ -126,13 +131,13 @@ router conn =
                 conn
 
         ( POST, AllPackagesSince since ) ->
-            StatusQueries.getPackagesSince since
+            StatusQueries.getPackagesSince (since + startElm19)
                 StatusTable.LabelReady
                 (ReadyPackagesSinceLoaded since)
                 conn
 
         ( GET, AllPackagesSince since ) ->
-            StatusQueries.getPackagesSince since
+            StatusQueries.getPackagesSince (since + startElm19)
                 StatusTable.LabelReady
                 (ReadyPackagesSinceLoaded since)
                 conn
@@ -329,10 +334,6 @@ update msg conn =
         CheckSeqNo loadResult ->
             case loadResult of
                 Dynamo.GetItemNotFound ->
-                    let
-                        startElm19 =
-                            6557
-                    in
                     ( conn
                     , RootSite.fetchAllPackagesSince startElm19
                         |> Task.map2 Tuple.pair Time.now
