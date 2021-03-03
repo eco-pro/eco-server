@@ -202,7 +202,10 @@ def compile_elm(author,
             capture_output=True,
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
-        errorJson = json.loads(errorString, strict=False)
+        try:
+            errorJson = json.loads(errorString, strict=False)
+        except JSONDecodeError:
+            errorJson = {"error": "Error decoding JSON report." }
 
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
