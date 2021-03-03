@@ -76,7 +76,7 @@ def report_error(seq, reason):
                          json={"errorReason": reason})
 
     if errorResp.status_code == 500:
-        print("Server error whilst reporting error.")
+        print("== Error: Server error whilst reporting error.")
         print(errorResp.text)
         quit()
 
@@ -96,7 +96,7 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip
                                "sha1PackageContents": content_hash})
 
     if errorResp.status_code == 500:
-        print("Server error whilst reporting compile error.")
+        print("== Error: Server error whilst reporting compile error.")
         print(errorResp.text)
         quit()
 
@@ -177,6 +177,8 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
     # The JSON report is trimmed to a summary only, the compile log should
     # be consulted for the full details.
     if elmResult.returncode != 0:
+        print("== Error: Compiled failed.")
+                
         elmReportResult = subprocess.run(
             ["elm", "make", "--report=json"],
             capture_output=True,
@@ -236,7 +238,7 @@ def upload_file(file_name, bucket, object_name=None):
     return True
 
 
-print("=== Eco-Server Elm Package Build Script ===")
+print("====== Eco-Server Elm Package Build Script ======")
 
 start_dir = os.getcwd()
 
@@ -244,7 +246,7 @@ while True:
     os.chdir(start_dir)
 
     # Check on the package server what job to do next, if any.
-    print("\n  What job?")
+    print("\n==== What job?")
 
     resp = req.get("http://localhost:3000/root-site/packages/nextjob")
 
