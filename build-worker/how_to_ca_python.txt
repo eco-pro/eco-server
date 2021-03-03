@@ -13,6 +13,8 @@ Run the python build Script
 
     AWS_ACCESS_KEY_ID=S3RVER \
     AWS_SECRET_ACCESS_KEY=S3RVER \
+    PACKAGE_API_ROOT=http://localhost:3000/ \
+    S3_ENDPOINT=http://localhost:4569/ \
     https_proxy=http://127.0.0.1:8080 \
-    REQUESTS_CA_BUNDLE=~/.mitprpoxy/mitmproxy-ca-cert.pem \
+    REQUESTS_CA_BUNDLE=~/.mitmproxy/mitmproxy-ca-cert.pem \
     ../build_elm.py

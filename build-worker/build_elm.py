@@ -14,6 +14,13 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
+config = {
+    'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
+    'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
+    'S3_ENDPOINT': os.environ.get('S3_ENDPOINT')
+}
+
 
 def calc_zip_file_sha1(zip_file_name):
     """
@@ -73,7 +80,7 @@ def report_error(seq, reason):
     """
     Send an error message to /packages/{seqNo}/error
     """
-    errorResp = req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/error",
+    errorResp = req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/error",
                          json={"errorReason": reason})
 
     if errorResp.status_code == 500:
@@ -86,7 +93,7 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip
     """
     Send an error message to /packages/{seqNo}/error for a compile error.
     """
-    errorResp = req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/error",
+    errorResp = req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/error",
                          json={"errorReason": "compile-failed",
                                "compilerVersion": version,
                                "reportJson": errors,
@@ -160,6 +167,8 @@ def compile_elm(author,
                 workingDir=None,
                 compiler="elm"):
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    log_bucket_name = "elm-build-logs"
+
     log_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.txt"
     json_report_file_name = timestr + "_" + author + "_" + \
@@ -175,7 +184,7 @@ def compile_elm(author,
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
     print("Copying build log onto S3.")
-    upload_file(log_file_name, "elm-build-logs", object_name=log_file_name)
+    upload_file(log_file_name, log_bucket_name, object_name=log_file_name)
     # os.remove(log_file_name)
 
     # If compilation fails, run it again and get the JSON report.
@@ -194,7 +203,7 @@ def compile_elm(author,
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
         print("Copying build report json onto S3.")
-        upload_file(json_report_file_name, "elm-build-logs",
+        upload_file(json_report_file_name, log_bucket_name,
                     object_name=json_report_file_name)
         # os.remove(json_report_file_name)
 
@@ -205,8 +214,8 @@ def compile_elm(author,
         report_compile_error(seq=seq,
                              version="0.19.1",
                              errors=errorJson,
-                             compileLogUrl="http://buildlogs.s3.log/" + log_file_name,
-                             jsonReportUrl="http://buildlogs.s3.log/" + json_report_file_name,
+                             compileLogUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + log_file_name,
+                             jsonReportUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + json_report_file_name,
                              zip_hash=zip_hash,
                              content_hash=content_hash)
         return False
@@ -234,7 +243,7 @@ def upload_file(file_name, bucket, object_name=None):
     # Upload the file
     s3 = boto3.resource(
         service_name="s3",
-        endpoint_url="http://localhost:4569",
+        endpoint_url=config['S3_ENDPOINT'],
     )
 
     try:
@@ -256,7 +265,7 @@ while True:
     # Check on the package server what job to do next, if any.
     print("\n==== What job?")
 
-    resp = req.get("http://localhost:3000/root-site/packages/nextjob")
+    resp = req.get(config['PACKAGE_API_ROOT'] + "root-site/packages/nextjob")
 
     if resp.status_code != 200:
         print("No jobs. All done.")
@@ -352,7 +361,7 @@ while True:
     # POST to the package server to tell it the job is complete.
 
     print("Letting the package server know where to find it...")
-    req.post("http://localhost:3000/root-site/packages/" + str(seq) + "/ready",
+    req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/ready",
              json={"elmJson": data,
                    "url": "http://localhost:4569/elm-packages/" + archive_name,
                    "sha1ZipArchive": zip_hash,
