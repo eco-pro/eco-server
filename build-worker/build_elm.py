@@ -14,6 +14,7 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
+
 def calc_zip_file_sha1(zip_file_name):
     """
     Calculate a hash of the .zip file and over its contents.
@@ -151,9 +152,13 @@ def is_elm_package_file(pathname):
         return False
 
 
-def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir=None):
-    print("Compile with Elm 0.19.1")
-
+def compile_elm(author,
+                packageName,
+                version,
+                zip_hash,
+                content_hash,
+                workingDir=None,
+                compiler="elm"):
     timestr = time.strftime("%Y%m%d-%H%M%S")
     log_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.txt"
@@ -161,7 +166,7 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
         packageName + "_" + version + "_compile_0.19.1.json"
 
     # Compile with human readable output logged.
-    elmResult = subprocess.run(["elm", "make", "--docs=docs.json"],
+    elmResult = subprocess.run([compiler, "make", "--docs=docs.json"],
                                stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT,
                                cwd=workingDir)
@@ -171,16 +176,16 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
 
     print("Copying build log onto S3.")
     upload_file(log_file_name, "elm-build-logs", object_name=log_file_name)
-    #os.remove(log_file_name)
+    # os.remove(log_file_name)
 
     # If compilation fails, run it again and get the JSON report.
     # The JSON report is trimmed to a summary only, the compile log should
     # be consulted for the full details.
     if elmResult.returncode != 0:
         print("== Error: Compiled failed.")
-                
+
         elmReportResult = subprocess.run(
-            ["elm", "make", "--report=json"],
+            [compiler, "make", "--report=json"],
             capture_output=True,
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
@@ -189,20 +194,21 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
         print("Copying build report json onto S3.")
-        upload_file(json_report_file_name, "elm-build-logs", object_name=json_report_file_name)
-        #os.remove(json_report_file_name)
+        upload_file(json_report_file_name, "elm-build-logs",
+                    object_name=json_report_file_name)
+        # os.remove(json_report_file_name)
 
         keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key]
                      for key in keysToKeep if key in errorJson}
 
-        report_compile_error(seq = seq,
-                             version = "0.19.1",
-                             errors = errorJson,
-                             compileLogUrl = "http://buildlogs.s3.log/" + log_file_name,
-                             jsonReportUrl = "http://buildlogs.s3.log/" + json_report_file_name,
-                             zip_hash = zip_hash,
-                             content_hash = content_hash)
+        report_compile_error(seq=seq,
+                             version="0.19.1",
+                             errors=errorJson,
+                             compileLogUrl="http://buildlogs.s3.log/" + log_file_name,
+                             jsonReportUrl="http://buildlogs.s3.log/" + json_report_file_name,
+                             zip_hash=zip_hash,
+                             content_hash=content_hash)
         return False
 
     print("Compiled Ok.")
@@ -210,6 +216,7 @@ def compile_elm(author, packageName, version, zip_hash, content_hash, workingDir
     os.remove(workingDir + "/docs.json")
 
     return True
+
 
 def upload_file(file_name, bucket, object_name=None):
     """Upload a file to an S3 bucket
@@ -226,8 +233,8 @@ def upload_file(file_name, bucket, object_name=None):
 
     # Upload the file
     s3 = boto3.resource(
-      service_name = "s3",
-      endpoint_url = "http://localhost:4569",
+        service_name="s3",
+        endpoint_url="http://localhost:4569",
     )
 
     try:
@@ -308,11 +315,19 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                if compile_elm(author, packageName, version, zip_hash, content_hash, workingDir) == False:
+                print("Compile with Elm 0.19.0")
+                if compile_elm(author, packageName, version,
+                               zip_hash, content_hash,
+                               workingDir,
+                               compiler="elm19") == False:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                if compile_elm(author, packageName, version, zip_hash, content_hash, workingDir) == False:
+                print("Compile with Elm 0.19.1")
+                if compile_elm(author, packageName, version,
+                               zip_hash, content_hash,
+                               workingDir,
+                               compiler="elm") == False:
                     continue
 
             else:

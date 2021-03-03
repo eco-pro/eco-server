@@ -119,7 +119,19 @@ router conn =
                 ReadyPackagesLoaded
                 conn
 
+        ( GET, AllPackages ) ->
+            StatusQueries.getPackagesSince 0
+                StatusTable.LabelReady
+                ReadyPackagesLoaded
+                conn
+
         ( POST, AllPackagesSince since ) ->
+            StatusQueries.getPackagesSince since
+                StatusTable.LabelReady
+                (ReadyPackagesSinceLoaded since)
+                conn
+
+        ( GET, AllPackagesSince since ) ->
             StatusQueries.getPackagesSince since
                 StatusTable.LabelReady
                 (ReadyPackagesSinceLoaded since)
