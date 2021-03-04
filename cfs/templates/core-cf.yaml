@@ -1,0 +1,48 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Core infrastructure
+
+Parameters:
+  ResourcePrefix:
+    Type: String
+    Description: Resource prefix to use when creating necessary objects
+  EnvironmentName:
+    Description: The name of the environment you are creating. Could be dev, dev-mpv2, dev-2 etc
+    Type: String
+  AcsIdentityUserPool:
+    Description: Acs Identity Cognito User Pool
+    Type: String
+  Project:
+    Description: Project Name
+    Type: String
+  ProjectVersion:
+    Description: Project Version
+    Type: String
+
+Resources:
+  InfrastructureBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ["", [!Ref ResourcePrefix, "infrastructure"] ]
+      Tags:
+        - Key: "acs:project"
+          Value: !Ref Project
+        - Key: "acs:project-version"
+          Value: !Ref ProjectVersion
+
+Outputs:
+  AwsAccountId:
+    Value: !Ref AWS::AccountId
+    Description: Account ID of the AWS account
+  AwsRegion:
+    Value: !Ref AWS::Region
+    Description: Region of the AWS deployment
+  InfrastructureBucket:
+    Value: !Ref InfrastructureBucket
+    Description: Name of the private S3 bucket used by the framework
+  Project:
+    Description: Project Name
+    Value: !Ref Project
+  ProjectVersion:
+    Description: Project Version
+    Value: !Ref ProjectVersion
