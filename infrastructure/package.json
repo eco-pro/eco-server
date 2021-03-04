@@ -19,6 +19,7 @@
     "@aws-cdk/aws-ecs": "^1.91.0",
     "@aws-cdk/aws-ecs-patterns": "^1.91.0",
     "@aws-cdk/aws-s3": "^1.91.0",
+    "@aws-cdk/aws-sqs": "^1.91.0",
     "@aws-cdk/core": "1.91.0"
   }
 }
