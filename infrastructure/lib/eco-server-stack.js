@@ -11,9 +11,9 @@ export default class EcoServerStack extends sst.Stack {
     super(scope, id, props);
 
     // VPC Network Segment.
-    const vpc = new ec2.Vpc(this, "eco-server-vpc", {
-      maxAzs: 1
-    });
+    // const vpc = new ec2.Vpc(this, "eco-server-vpc", {
+    //   maxAzs: 1
+    // });
 
     // Package Server API.
 
@@ -21,11 +21,11 @@ export default class EcoServerStack extends sst.Stack {
 
     // Build Artifacts.
     new s3.Bucket(this, 'elm-packages', {
-      versioned: true
+       versioned: false
     });
 
     new s3.Bucket(this, 'elm-build-logs', {
-      versioned: true
+      versioned: false
     });
 
     // Build job processing.
