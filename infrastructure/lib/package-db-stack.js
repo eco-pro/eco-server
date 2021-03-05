@@ -10,36 +10,6 @@ export default class PackageDBStack extends sst.Stack {
 
     const app = this.node.root;
 
-    // BuildStatusTable:
-    //   Type: 'AWS::DynamoDB::Table'
-    //   DeletionPolicy: Delete
-    //   Properties:
-    //     AttributeDefinitions:
-    //       - AttributeName: label
-    //         AttributeType: S
-    //       - AttributeName: seq
-    //         AttributeType: N
-    //       - AttributeName: fqPackage
-    //         AttributeType: S
-    //     KeySchema:
-    //       - AttributeName: label
-    //         KeyType: HASH
-    //       - AttributeName: seq
-    //         KeyType: RANGE
-    //     ProvisionedThroughput:
-    //       ReadCapacityUnits: 1
-    //       WriteCapacityUnits: 1
-    //     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
-    //     GlobalSecondaryIndexes:
-    //       - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus-byfqpackage
-    //         KeySchema:
-    //           - AttributeName: fqPackage
-    //             KeyType: HASH
-    //         Projection:
-    //           ProjectionType: ALL
-    //         ProvisionedThroughput:
-    //           ReadCapacityUnits: 1
-    //           WriteCapacityUnits: 1
     const buildStatusTable = new dynamodb.Table(this, "eco-buildstatus", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: {
@@ -52,21 +22,15 @@ export default class PackageDBStack extends sst.Stack {
       }
     });
 
-    //
-    // MarkersTable:
-    //   Type: 'AWS::DynamoDB::Table'
-    //   DeletionPolicy: Delete
-    //   Properties:
-    //     AttributeDefinitions:
-    //       - AttributeName: source
-    //         AttributeType: S
-    //     KeySchema:
-    //       - AttributeName: source
-    //         KeyType: HASH
-    //     ProvisionedThroughput:
-    //       ReadCapacityUnits: 1
-    //       WriteCapacityUnits: 1
-    //     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
+    buildStatusTable.addGlobalSecondaryIndex({
+      indexName: "eco-buildstatus-byfqpackage",
+      projectType: dynamodb.ProjectionType.ALL,
+      partitionKey: {
+        name: "fqPacakge",
+        type: dynamodb.AttributeType.STRING
+      }
+    });
+
     const markersTable = new dynamodb.Table(this, "eco-markers", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: {
@@ -75,20 +39,6 @@ export default class PackageDBStack extends sst.Stack {
       }
     });
 
-    // RootSiteImportsTable:
-    //   Type: 'AWS::DynamoDB::Table'
-    //   DeletionPolicy: Delete
-    //   Properties:
-    //     AttributeDefinitions:
-    //       - AttributeName: seq
-    //         AttributeType: N
-    //     KeySchema:
-    //       - AttributeName: seq
-    //         KeyType: HASH
-    //     ProvisionedThroughput:
-    //       ReadCapacityUnits: 1
-    //       WriteCapacityUnits: 1
-    //     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-rootsiteimports
     const rootSiteImportsTable = new dynamodb.Table(this, "eco-rootsiteimports", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: {
