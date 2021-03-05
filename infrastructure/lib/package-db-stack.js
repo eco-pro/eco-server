@@ -10,6 +10,16 @@ export default class PackageDBStack extends sst.Stack {
 
     const app = this.node.root;
 
+    // Buckets for Build Artifacts.
+    new s3.Bucket(this, 'elm-packages', {
+       versioned: false
+    });
+
+    new s3.Bucket(this, 'elm-build-logs', {
+      versioned: false
+    });
+
+    // DynamoDB Tables for build metadata.
     const buildStatusTable = new dynamodb.Table(this, "eco-buildstatus", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: {

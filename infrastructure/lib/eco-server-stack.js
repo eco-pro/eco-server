@@ -10,23 +10,12 @@ export default class EcoServerStack extends sst.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
+    // Build Job Queue and Processor.
+    
     // VPC Network Segment.
     // const vpc = new ec2.Vpc(this, "eco-server-vpc", {
     //   maxAzs: 1
     // });
-
-    // Package Server API.
-
-    // Package Database.
-
-    // Build Artifacts.
-    new s3.Bucket(this, 'elm-packages', {
-       versioned: false
-    });
-
-    new s3.Bucket(this, 'elm-build-logs', {
-      versioned: false
-    });
 
     // Build job processing.
     const queue = new sqs.Queue(this, "eco-buildjob-queue");
