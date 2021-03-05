@@ -6,7 +6,7 @@ const s3 = require('@aws-cdk/aws-s3');
 const sqs = require('@aws-cdk/aws-sqs');
 const sst = require('@serverless-stack/resources');
 
-class InfrastructureStack extends sst.Stack {
+class EcoServerStack extends sst.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
