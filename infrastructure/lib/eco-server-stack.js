@@ -6,7 +6,7 @@ const s3 = require('@aws-cdk/aws-s3');
 const sqs = require('@aws-cdk/aws-sqs');
 const sst = require('@serverless-stack/resources');
 
-class EcoServerStack extends sst.Stack {
+export default class EcoServerStack extends sst.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
@@ -42,8 +42,4 @@ class EcoServerStack extends sst.Stack {
     //   image: ecs.ContainerImage.fromRegistry("amazon/amazon-ecs-sample")
     // });
   }
-}
-
-module.exports = {
-  EcoServerStack
 }
