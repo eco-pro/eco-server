@@ -31,19 +31,19 @@ class InfrastructureStack extends sst.Stack {
     // Build job processing.
     const queue = new sqs.Queue(this, "eco-buildjob-queue");
 
-    const cluster = new ecs.Cluster(this, "eco-ecs-cluster", {
-      vpc: vpc
-    });
-
-    new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
-      cluster,
-      queue,
-      desiredTaskCount: 1,
-      image: ecs.ContainerImage.fromRegistry("amazon/amazon-ecs-sample")
-    });
+    // const cluster = new ecs.Cluster(this, "eco-ecs-cluster", {
+    //   vpc: vpc
+    // });
+    //
+    // new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
+    //   cluster,
+    //   queue,
+    //   desiredTaskCount: 1,
+    //   image: ecs.ContainerImage.fromRegistry("amazon/amazon-ecs-sample")
+    // });
   }
 }
 
 module.exports = {
-  InfrastructureStack
+  EcoServerStack
 }
