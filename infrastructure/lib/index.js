@@ -1,7 +1,5 @@
-import MyStack from "./MyStack";
+import EcoServerStack from "./eco-server-stack.js";
 
 export default function main(app) {
-  new MyStack(app, "my-stack");
-
-  // Add more stacks
+  new EcoServerStack(app, "eco-server");
 }
