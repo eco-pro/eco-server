@@ -1,10 +1,7 @@
-import {
-  CfnOutput
-} from "@aws-cdk/core";
-import * as dynamodb from "@aws-cdk/aws-dynamodb";
-import * as sst from "@serverless-stack/resources";
+import { Api, Stack, Table } from "@serverless-stack/resources";
+import { CfnOutput } from "@aws-cdk/core";
 
-export default class PackageDBStack extends sst.Stack {
+export default class PackageDBStack extends Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
@@ -12,49 +9,38 @@ export default class PackageDBStack extends sst.Stack {
 
     // Buckets for Build Artifacts.
     new s3.Bucket(this, 'elm-packages', {
-       versioned: false
+      versioned: false
     });
 
     new s3.Bucket(this, 'elm-build-logs', {
       versioned: false
     });
 
-    // DynamoDB Tables for build metadata.
-    const buildStatusTable = new dynamodb.Table(this, "eco-buildstatus", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: {
-        name: "label",
-        type: dynamodb.AttributeType.STRING
+    // DynamoDB tables for build metadata.
+    const buildStatusTable = new Table(this, "buildstatus", {
+      fields: {
+        label: TableFieldType.STRING,
+        seq: TableFieldType.NUMBER,
+        fqPackage: TableFieldType.STRING,
       },
-      sortKey: {
-        name: "seq",
-        type: dynamodb.AttributeType.NUMBER
-      }
+      primaryIndex: { partitionKey: "label", sortKey: "seq" },
+      secondaryIndexes: {
+        byfqpackage: { partitionKey: "fqPackage" },
+      },
     });
 
-    buildStatusTable.addGlobalSecondaryIndex({
-      indexName: "eco-buildstatus-byfqpackage",
-      projectType: dynamodb.ProjectionType.ALL,
-      partitionKey: {
-        name: "fqPacakge",
-        type: dynamodb.AttributeType.STRING
-      }
+    const markersTable = new Table(this, "markers", {
+      fields: {
+        source: TableFieldType.STRING
+      },
+      primaryIndex: { partitionKey: "source" }
     });
 
-    const markersTable = new dynamodb.Table(this, "eco-markers", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: {
-        name: "source",
-        type: dynamodb.AttributeType.STRING
-      }
-    });
-
-    const rootSiteImportsTable = new dynamodb.Table(this, "eco-rootsiteimports", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: {
-        name: "seq",
-        type: dynamodb.AttributeType.NUMBER
-      }
+    const rootSiteImportsTable = new Table(this, "rootsiteimports", {
+      fields: {
+        seq: TableFieldType.NUMBER
+      },
+      primaryIndex: { partitionKey: "seq" }
     });
 
     // Output values
