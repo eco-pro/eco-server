@@ -6,19 +6,19 @@ const s3 = require('@aws-cdk/aws-s3');
 const sqs = require('@aws-cdk/aws-sqs');
 const sst = require('@serverless-stack/resources');
 
-export default class BuildJobStack extends sst.Stack {
+export default class BuildJobStack extends cdk.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
     // Build Job Queue and Processor.
 
     // VPC Network Segment.
-    // const vpc = new ec2.Vpc(this, "eco-server-vpc", {
-    //   maxAzs: 1
-    // });
+    const vpc = new ec2.Vpc(this, "eco-vpc", {
+      maxAzs: 1
+    });
 
     // Build job processing.
-    const queue = new sqs.Queue(this, "eco-buildjob-queue");
+    const queue = new sqs.Queue(this, "buildjob-queue");
 
     // const cluster = new ecs.Cluster(this, "eco-ecs-cluster", {
     //   vpc: vpc
