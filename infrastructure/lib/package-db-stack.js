@@ -1,5 +1,7 @@
-import { Api, Stack, Table } from "@serverless-stack/resources";
+import { Api, Stack, Table, TableFieldType } from "@serverless-stack/resources";
 import { CfnOutput } from "@aws-cdk/core";
+import * as s3 from "@aws-cdk/aws-s3";
+import * as dynamodb from "@aws-cdk/aws-dynamodb";
 
 export default class PackageDBStack extends Stack {
   constructor(scope, id, props) {
@@ -25,7 +27,12 @@ export default class PackageDBStack extends Stack {
       },
       primaryIndex: { partitionKey: "label", sortKey: "seq" },
       secondaryIndexes: {
-        byfqpackage: { partitionKey: "fqPackage" },
+        byfqpackage: {
+          partitionKey: "fqPackage",
+          indexProps: {
+            projectionType: dynamodb.ProjectionType.ALL
+          }
+        },
       },
     });
 
@@ -44,13 +51,19 @@ export default class PackageDBStack extends Stack {
     });
 
     // Output values
-    // new CfnOutput(this, "TableName", {
-    //   value: table.tableName,
-    //   exportName: app.logicalPrefixedName("TableName"),
+    // new CfnOutput(this, "buildstatusArn", {
+    //   value: buildStatusTable.tableName,
+    //   exportName: app.logicalPrefixedName("buildstatusArn"),
     // });
-    // new CfnOutput(this, "TableArn", {
-    //   value: table.tableArn,
-    //   exportName: app.logicalPrefixedName("TableArn"),
+    // new CfnOutput(this, "markersArn", {
+    //   value: markersTable.markers,
+    //   exportName: app.logicalPrefixedName("markersArn"),
+    // });
+
+    //
+    // new CfnOutput(this, "rootsiteimportsArn", {
+    //   value: rootSiteImportsTable.tableName,
+    //   exportName: app.logicalPrefixedName("rootsiteimports"),
     // });
   }
 }
