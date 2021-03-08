@@ -5,12 +5,16 @@ const ecs_patterns = require("@aws-cdk/aws-ecs-patterns");
 const s3 = require('@aws-cdk/aws-s3');
 const sqs = require('@aws-cdk/aws-sqs');
 const sst = require('@serverless-stack/resources');
+import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
+const path = require('path');
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
     // Build Job Queue and Processor.
+    const buildJobImage =
+      ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', '..', 'build-worker'));
 
     // VPC Network Segment.
     const vpc = new ec2.Vpc(this, "eco-vpc", {
@@ -25,10 +29,10 @@ export default class BuildJobStack extends sst.Stack {
     });
 
     new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
-      cluster,
-      queue,
+      cluster: cluster,
+      queue: queue,
       desiredTaskCount: 1,
-      image: ecs.ContainerImage.fromRegistry("amazon/amazon-ecs-sample")
+      image: buildJobImage
     });
   }
 }
