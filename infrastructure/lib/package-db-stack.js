@@ -34,20 +34,23 @@ export default class PackageDBStack extends Stack {
           }
         },
       },
+      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
     });
 
     const markersTable = new Table(this, "markers", {
       fields: {
         source: TableFieldType.STRING
       },
-      primaryIndex: { partitionKey: "source" }
+      primaryIndex: { partitionKey: "source" },
+      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
     });
 
     const rootSiteImportsTable = new Table(this, "rootsiteimports", {
       fields: {
         seq: TableFieldType.NUMBER
       },
-      primaryIndex: { partitionKey: "seq" }
+      primaryIndex: { partitionKey: "seq" },
+      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
     });
 
     // Output values
