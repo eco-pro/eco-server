@@ -10,12 +10,20 @@ export default class PackageDBStack extends Stack {
     const app = this.node.root;
 
     // Buckets for Build Artifacts.
-    new s3.Bucket(this, 'elm-packages', {
+    const packagesBucket = new s3.Bucket(this, 'elm-packages', {
       versioned: false
     });
 
-    new s3.Bucket(this, 'elm-build-logs', {
+    new CfnOutput(this, "elm-packages-bucket", {
+      value: packagesBucket.bucketName
+    });
+
+    const buildLogsBucket = new s3.Bucket(this, 'elm-build-logs', {
       versioned: false
+    });
+
+    new CfnOutput(this, "elm-build-logs-bucket", {
+      value: buildLogsBucket.bucketName
     });
 
     // DynamoDB tables for build metadata.
