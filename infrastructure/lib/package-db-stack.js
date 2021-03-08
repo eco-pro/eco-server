@@ -1,5 +1,5 @@
 import { Api, Stack, Table, TableFieldType } from "@serverless-stack/resources";
-import { CfnOutput } from "@aws-cdk/core";
+import { CfnOutput, RemovalPolicy } from "@aws-cdk/core";
 import * as s3 from "@aws-cdk/aws-s3";
 import * as dynamodb from "@aws-cdk/aws-dynamodb";
 
@@ -11,7 +11,9 @@ export default class PackageDBStack extends Stack {
 
     // Buckets for Build Artifacts.
     const packagesBucket = new s3.Bucket(this, 'elm-packages', {
-      versioned: false
+      versioned: false,
+      autoDeleteObjects: true,
+      removalPolicy: RemovalPolicy.DESTROY
     });
 
     new CfnOutput(this, "elm-packages-bucket", {
@@ -19,7 +21,9 @@ export default class PackageDBStack extends Stack {
     });
 
     const buildLogsBucket = new s3.Bucket(this, 'elm-build-logs', {
-      versioned: false
+      versioned: false,
+      autoDeleteObjects: true,
+      removalPolicy: RemovalPolicy.DESTROY
     });
 
     new CfnOutput(this, "elm-build-logs-bucket", {
@@ -27,54 +31,44 @@ export default class PackageDBStack extends Stack {
     });
 
     // DynamoDB tables for build metadata.
-    const buildStatusTable = new Table(this, "buildstatus", {
-      fields: {
-        label: TableFieldType.STRING,
-        seq: TableFieldType.NUMBER,
-        fqPackage: TableFieldType.STRING,
-      },
-      primaryIndex: { partitionKey: "label", sortKey: "seq" },
-      secondaryIndexes: {
-        byfqpackage: {
-          partitionKey: "fqPackage",
-          indexProps: {
-            projectionType: dynamodb.ProjectionType.ALL
-          }
-        },
-      },
-      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
+    const buildStatusTable = new dynamodb.Table(this, "build-status", {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: "label", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "seq", type: dynamodb.AttributeType.NUMBER },
+      removalPolicy: RemovalPolicy.DESTROY
     });
 
-    const markersTable = new Table(this, "markers", {
-      fields: {
-        source: TableFieldType.STRING
-      },
-      primaryIndex: { partitionKey: "source" },
-      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
+    buildStatusTable.addGlobalSecondaryIndex({
+      indexName: "buildstatus-byfqpackage",
+      projectType: dynamodb.ProjectionType.ALL,
+      partitionKey: { name: "fqPacakge", type: dynamodb.AttributeType.STRING }
     });
 
-    const rootSiteImportsTable = new Table(this, "rootsiteimports", {
-      fields: {
-        seq: TableFieldType.NUMBER
-      },
-      primaryIndex: { partitionKey: "seq" },
-      dynamodbTable: { removalPolicy: dynamodb.DESTROY }
+    new CfnOutput(this, "build-status-table", {
+     value: buildStatusTable.tableName,
+     exportName: app.logicalPrefixedName("build-status-arn"),
     });
 
-    // Output values
-    // new CfnOutput(this, "buildstatusArn", {
-    //   value: buildStatusTable.tableName,
-    //   exportName: app.logicalPrefixedName("buildstatusArn"),
-    // });
-    // new CfnOutput(this, "markersArn", {
-    //   value: markersTable.markers,
-    //   exportName: app.logicalPrefixedName("markersArn"),
-    // });
+    const markersTable = new dynamodb.Table(this, "markers", {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: "source", type: dynamodb.AttributeType.STRING },
+      removalPolicy: RemovalPolicy.DESTROY
+    });
 
-    //
-    // new CfnOutput(this, "rootsiteimportsArn", {
-    //   value: rootSiteImportsTable.tableName,
-    //   exportName: app.logicalPrefixedName("rootsiteimports"),
-    // });
+    new CfnOutput(this, "markers-table", {
+     value: markersTable.tableName,
+     exportName: app.logicalPrefixedName("markers-arn"),
+    });
+
+    const rootSiteImportsTable = new dynamodb.Table(this, "rootsiteimports", {
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: { name: "seq", type: dynamodb.AttributeType.NUMBER },
+      removalPolicy: RemovalPolicy.DESTROY
+    });
+
+    new CfnOutput(this, "rootsiteimports-table", {
+     value: rootSiteImportsTable.tableName,
+     exportName: app.logicalPrefixedName("rootsiteimports-arn"),
+    });
   }
 }
