@@ -7,6 +7,8 @@ const sqs = require('@aws-cdk/aws-sqs');
 const sst = require('@serverless-stack/resources');
 import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
 const path = require('path');
+import * as cloudwatch from '@aws-cdk/aws-cloudwatch';
+import * as sns from '@aws-cdk/aws-sns';
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -21,6 +23,52 @@ export default class BuildJobStack extends sst.Stack {
       maxAzs: 1
     });
 
+    // Build Job Queue and scaling based on queue size.
+    // If the queue shrinks to zero, no build jobs will run.
+    // If the queue grows to one or more, one build job will run.
+    const queue = new sqs.Queue(this, "buildjob-queue");
+
+    const jobScalingTopic = new sns.Topic(this, 'job-scale', {
+         displayName: 'Topic for Scaling Build Job Fargate Tasks'
+    });
+
+    new sst.Topic(this, "job-scale-sst", {
+       subscribers: ["src/scaling.handleAlarm"],
+       snsTopic: jobScalingTopic
+    });
+
+    const jobsReadyAlarm = new cloudwatch.Alarm(this, 'jobs-ready', {
+      alarmName: "BuildJobQueue#Ready",
+      metric: queue.metric("ApproximateNumberOfMessagesVisible"),
+      threshold: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      datapointsToAlarm: 1,
+      period: cdk.Duration.seconds(60)
+    });
+
+    jobsReadyAlarm.addAlarmAction({
+      bind(scope, alarm) {
+        return { alarmActionArn: jobScalingTopic.topicArn };
+      }
+    });
+
+    const jobsNoneAlarm = new cloudwatch.Alarm(this, 'jobs-none', {
+      alarmName: "BuildJobQueue#Empty",
+      metric: queue.metric("ApproximateNumberOfMessagesVisible"),
+      threshold: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+      evaluationPeriods: 1,
+      datapointsToAlarm: 1,
+      period: cdk.Duration.seconds(60)
+    });
+
+    jobsNoneAlarm.addAlarmAction({
+      bind(scope, alarm) {
+        return { alarmActionArn: jobScalingTopic.topicArn };
+      }
+    });
+
     // Build job processing.
     const logging = new ecs.AwsLogDriver({
       streamPrefix: "eco-build-service"
@@ -30,20 +78,12 @@ export default class BuildJobStack extends sst.Stack {
       vpc: vpc
     });
 
-    const taskDef = new ecs.FargateTaskDefinition(this, "build-task", {
-      memoryLimitMiB: 512,
-      cpu: 256,
-    })
-
-    taskDef.addContainer("build-worker", {
-      image: buildJobImage,
-      logging
-    })
-
-    const buildService = new ecs.FargateService(this, "build-service", {
-      cluster,
-      taskDefinition: taskDef,
-      desiredCount: 0
+    new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
+      cluster: cluster,
+      queue: queue,
+      desiredTaskCount: 0,
+      maxScalingCapacity: 1,
+      image: buildJobImage
     });
   }
 }
