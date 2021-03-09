@@ -17,22 +17,33 @@ export default class BuildJobStack extends sst.Stack {
       ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', '..', 'build-worker'));
 
     // VPC Network Segment.
-    const vpc = new ec2.Vpc(this, "eco-vpc", {
+    const vpc = new ec2.Vpc(this, "vpc", {
       maxAzs: 1
     });
 
     // Build job processing.
-    const queue = new sqs.Queue(this, "buildjob-queue");
+    const logging = new ecs.AwsLogDriver({
+      streamPrefix: "eco-build-service"
+    });
 
-    const cluster = new ecs.Cluster(this, "eco-ecs-cluster", {
+    const cluster = new ecs.Cluster(this, "ecs-cluster", {
       vpc: vpc
     });
 
-    new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
-      cluster: cluster,
-      queue: queue,
-      desiredTaskCount: 1,
-      image: buildJobImage
+    const taskDef = new ecs.FargateTaskDefinition(this, "build-task", {
+      memoryLimitMiB: 512,
+      cpu: 256,
+    })
+
+    taskDef.addContainer("build-worker", {
+      image: buildJobImage,
+      logging
+    })
+
+    const buildService = new ecs.FargateService(this, "build-service", {
+      cluster,
+      taskDefinition: taskDef,
+      desiredCount: 0
     });
   }
 }
