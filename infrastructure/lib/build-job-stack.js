@@ -9,6 +9,8 @@ import { DockerImageAsset } from '@aws-cdk/aws-ecr-assets';
 const path = require('path');
 import * as cloudwatch from '@aws-cdk/aws-cloudwatch';
 import * as sns from '@aws-cdk/aws-sns';
+import { SnsEventSource } from '@aws-cdk/aws-lambda-event-sources';
+
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -32,10 +34,14 @@ export default class BuildJobStack extends sst.Stack {
          displayName: 'Topic for Scaling Build Job Fargate Tasks'
     });
 
-    new sst.Topic(this, "job-scale-sst", {
-       subscribers: ["src/scaling.handleAlarm"],
-       snsTopic: jobScalingTopic
+    const scalingHandler = new sst.Function(this, "scaling-handler", {
+      handler: "src/scaling.handleAlarm",
+      environment: {
+        FOR_EXAMPLE: "blah",
+      },
     });
+
+    scalingHandler.addEventSource(new SnsEventSource(jobScalingTopic, {}));
 
     const jobsReadyAlarm = new cloudwatch.Alarm(this, 'jobs-ready', {
       alarmName: "BuildJobQueue#Ready",
