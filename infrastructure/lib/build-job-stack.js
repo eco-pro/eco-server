@@ -25,11 +25,28 @@ export default class BuildJobStack extends sst.Stack {
       maxAzs: 1
     });
 
+    // Build job processing.
+    const queue = new sqs.Queue(this, "buildjob-queue");
+
+    const logging = new ecs.AwsLogDriver({
+      streamPrefix: "eco-build-service"
+    });
+
+    const cluster = new ecs.Cluster(this, "ecs-cluster", {
+      vpc: vpc
+    });
+
+    const buildService = new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
+      cluster: cluster,
+      queue: queue,
+      desiredTaskCount: 0,
+      maxScalingCapacity: 1,
+      image: buildJobImage
+    });
+
     // Build Job Queue and scaling based on queue size.
     // If the queue shrinks to zero, no build jobs will run.
     // If the queue grows to one or more, one build job will run.
-    const queue = new sqs.Queue(this, "buildjob-queue");
-
     const jobScalingTopic = new sns.Topic(this, 'job-scale', {
          displayName: 'Topic for Scaling Build Job Fargate Tasks'
     });
@@ -37,7 +54,9 @@ export default class BuildJobStack extends sst.Stack {
     const scalingHandler = new sst.Function(this, "scaling-handler", {
       handler: "src/scaling.handleAlarm",
       environment: {
-        FOR_EXAMPLE: "blah",
+        BUILD_CLUSTER_ARN: cluster.clusterArn,
+        BUILD_SERVICE_ARN: buildService.service.serviceArn,
+        BUILD_SERVICE_NAME: buildService.service.serviceName
       },
     });
 
@@ -73,23 +92,6 @@ export default class BuildJobStack extends sst.Stack {
       bind(scope, alarm) {
         return { alarmActionArn: jobScalingTopic.topicArn };
       }
-    });
-
-    // Build job processing.
-    const logging = new ecs.AwsLogDriver({
-      streamPrefix: "eco-build-service"
-    });
-
-    const cluster = new ecs.Cluster(this, "ecs-cluster", {
-      vpc: vpc
-    });
-
-    new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
-      cluster: cluster,
-      queue: queue,
-      desiredTaskCount: 0,
-      maxScalingCapacity: 1,
-      image: buildJobImage
     });
   }
 }
