@@ -15,11 +15,13 @@ import boto3
 from botocore.exceptions import ClientError
 
 config = {
-    'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
-    'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    # 'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
+    # 'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
     'S3_ENDPOINT': os.environ.get('S3_ENDPOINT')
 }
+
+print(config)
 
 
 def calc_zip_file_sha1(zip_file_name):
