@@ -6,9 +6,18 @@ var ecs = new aws.ECS();
 
 export async function handleAlarm(event, context) {
   console.log("Build Job Scaling Service.");
-  //console.log(event.Records[0].Sns.Message);
+  console.log(event.Records[0].Sns.Message);
 
   // Determine which action is to be taken based on the alarm name.
+  let message = event.Records[0].Sns.Message;
+  let alarmName = JSON.parse(message).AlarmName;
+  let action = alarmName.split('#')[1];
+  let desiredCount = 0;
+  if ("Ready" == action) {
+    desiredCount = 1;
+  }
+
+  console.log("Setting desiredCount to: " + desiredCount);
 
   // Set the desired count of the build job service.
   // ARN for build job service.
@@ -16,7 +25,7 @@ export async function handleAlarm(event, context) {
   return await ecs.updateService({
     cluster: clusterArn,
     service: serviceName,
-    desiredCount: 1
+    desiredCount: desiredCount
   }).promise().then(function(data) {
     console.log(data);
 
