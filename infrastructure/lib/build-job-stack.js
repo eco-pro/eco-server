@@ -10,7 +10,7 @@ const path = require('path');
 import * as cloudwatch from '@aws-cdk/aws-cloudwatch';
 import * as sns from '@aws-cdk/aws-sns';
 import { SnsEventSource } from '@aws-cdk/aws-lambda-event-sources';
-
+const iam = require('@aws-cdk/aws-iam');
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -61,6 +61,12 @@ export default class BuildJobStack extends sst.Stack {
     });
 
     scalingHandler.addEventSource(new SnsEventSource(jobScalingTopic, {}));
+
+    const scalingPolicy = new iam.PolicyStatement();
+    scalingPolicy.addActions("ecs:UpdateService");
+    scalingPolicy.addResources("*");
+
+    scalingHandler.addToRolePolicy(scalingPolicy);
 
     const jobsReadyAlarm = new cloudwatch.Alarm(this, 'jobs-ready', {
       alarmName: "BuildJobQueue#Ready",
