@@ -19,6 +19,8 @@ provider:
     buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
     markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
+    buildQueue: !ImportValue ${self:custom.sstApp}-BuildQueueName
+    buildService: !ImportValue ${self:custom.sstApp}-BuildServiceName
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -33,6 +35,16 @@ provider:
         - !ImportValue ${self:custom.sstApp}-BuildStatusTableArn
         - !ImportValue ${self:custom.sstApp}-MarkersTableArn
         - !ImportValue ${self:custom.sstApp}-RootSiteImportsTableArn
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildQueueArn
+    - Effect: Allow
+      Action:
+        - ecs:UpdateService
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildServiceArn
 
 plugins:
   - serverless-webpack
