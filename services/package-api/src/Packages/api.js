@@ -1,5 +1,5 @@
-//const elmServerless = require('@the-sett/serverless-elm-bridge');
-const elmServerless = require('/home/rupert/sc/github/the-sett/elm-serverless/src-bridge/index.js');
+const elmServerless = require('@the-sett/serverless-elm-bridge');
+//const elmServerless = require('/home/rupert/sc/github/the-sett/elm-serverless/src-bridge/index.js');
 
 const {
   DynamoDBPorts
