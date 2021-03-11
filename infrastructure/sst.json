@@ -1,0 +1,6 @@
+{
+  "name": "eco-server",
+  "stage": "dev",
+  "region": "eu-west-2",
+  "lint": false
+}
