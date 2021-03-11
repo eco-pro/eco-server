@@ -4,32 +4,26 @@
   "description": "Alternate Elm Package Server",
   "author": "Rupert Smith <github@thesett.com>",
   "license": "Apache-2.0",
-  "scripts": {
-    "start": "cd api/lambda && serverless offline",
-    "devdb": "cd api/lambda && sls dynamodb start --migrate --stage dev",
-    "deploy": "cd api/lambda && serverless deploy",
-    "undeploy": "cd api/lambda && serverless remove"
-  },
   "dependencies": {
-    "@the-sett/serverless-elm-bridge": "^4.0.0",
     "aws-sdk": "2.493.0"
   },
   "devDependencies": {
     "elm": "latest-0.19.1",
-    "aws-sdk": "2.493.0",
-    "cf-utils": "^1.0.2",
-    "del": "^3.0.0",
-    "elm-webpack-loader": "^5.0.0",
-    "inquirer": "^3.3.0",
-    "newman": "^4.5.1",
-    "ps-list": "^4.0.0",
+    "elm-webpack-loader": "^7.0.1",
     "serverless": "^1.45.1",
     "serverless-offline": "^3.16.0",
     "serverless-dynamodb-local": "^0.2.39",
     "serverless-s3-local": "^0.6.7",
     "serverless-webpack": "^4.1.0",
-    "vinyl-paths": "^2.1.0",
     "webpack": "^3.8.1",
     "webpack-stream": "^4.0.0"
+  },
+  "flarb": {
+    "cf-utils": "^1.0.2",
+    "del": "^3.0.0",
+    "inquirer": "^3.3.0",
+    "newman": "^4.5.1",
+    "ps-list": "^4.0.0",
+    "vinyl-paths": "^2.1.0"
   }
 }
