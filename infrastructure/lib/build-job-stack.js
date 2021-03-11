@@ -18,7 +18,7 @@ export default class BuildJobStack extends sst.Stack {
 
     // Build Job Queue and Processor.
     const buildJobImage =
-      ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', '..', 'build-worker'));
+      ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', 'build-worker'));
 
     // VPC Network Segment.
     const vpc = new ec2.Vpc(this, "vpc", {
