@@ -4,11 +4,20 @@ import Json.Decode as Decode exposing (Decoder)
 
 
 type alias Config =
-    { dynamoDbNamespace : String
+    { buildStatusTable : String
+    , markersTable : String
+    , rootSiteImportsTable : String
     }
 
 
 configDecoder : Decoder Config
 configDecoder =
-    Decode.field "DYNAMODB_NAMESPACE" Decode.string
-        |> Decode.map Config
+    Decode.succeed Config
+        |> decodeAndMap (Decode.field "buildStatusTable" Decode.string)
+        |> decodeAndMap (Decode.field "markersTable" Decode.string)
+        |> decodeAndMap (Decode.field "rootSiteImportsTable" Decode.string)
+
+
+decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b
+decodeAndMap =
+    Decode.map2 (|>)

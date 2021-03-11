@@ -16,8 +16,14 @@ export default class PackageDBStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY
     });
 
-    new CfnOutput(this, "elm-packages-bucket", {
-      value: packagesBucket.bucketName
+    new CfnOutput(this, "elm-packages-bucket-name", {
+     value: packagesBucket.bucketName,
+     exportName: app.logicalPrefixedName("ElmPackageBucketName")
+    });
+
+    new CfnOutput(this, "elm-packages-bucket-arn", {
+     value: packagesBucket.bucketArn,
+     exportName: app.logicalPrefixedName("ElmPackageBucketArn")
     });
 
     const buildLogsBucket = new s3.Bucket(this, 'elm-build-logs', {
@@ -26,8 +32,14 @@ export default class PackageDBStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY
     });
 
-    new CfnOutput(this, "elm-build-logs-bucket", {
-      value: buildLogsBucket.bucketName
+    new CfnOutput(this, "elm-build-logs-bucket-name", {
+     value: buildLogsBucket.bucketName,
+     exportName: app.logicalPrefixedName("ElmBuildLogsBucketName")
+    });
+
+    new CfnOutput(this, "elm-build-logs-bucket-arn", {
+     value: buildLogsBucket.bucketArn,
+     exportName: app.logicalPrefixedName("ElmBuildLogsBucketArn")
     });
 
     // DynamoDB tables for build metadata.
@@ -44,9 +56,14 @@ export default class PackageDBStack extends Stack {
       partitionKey: { name: "fqPacakge", type: dynamodb.AttributeType.STRING }
     });
 
-    new CfnOutput(this, "build-status-table", {
+    new CfnOutput(this, "build-status-table-name", {
      value: buildStatusTable.tableName,
-     exportName: app.logicalPrefixedName("build-status-arn"),
+     exportName: app.logicalPrefixedName("BuildStatusTableName")
+    });
+
+    new CfnOutput(this, "build-status-table-arn", {
+     value: buildStatusTable.tableArn,
+     exportName: app.logicalPrefixedName("BuildStatusTableArn")
     });
 
     const markersTable = new dynamodb.Table(this, "markers", {
@@ -55,9 +72,14 @@ export default class PackageDBStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY
     });
 
-    new CfnOutput(this, "markers-table", {
+    new CfnOutput(this, "markers-table-name", {
      value: markersTable.tableName,
-     exportName: app.logicalPrefixedName("markers-arn"),
+     exportName: app.logicalPrefixedName("MarkersTableName")
+    });
+
+    new CfnOutput(this, "markers-table-arn", {
+     value: markersTable.tableArn,
+     exportName: app.logicalPrefixedName("MarkersTableArn")
     });
 
     const rootSiteImportsTable = new dynamodb.Table(this, "rootsiteimports", {
@@ -66,9 +88,14 @@ export default class PackageDBStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY
     });
 
-    new CfnOutput(this, "rootsiteimports-table", {
+    new CfnOutput(this, "rootsiteimports-table-name", {
      value: rootSiteImportsTable.tableName,
-     exportName: app.logicalPrefixedName("rootsiteimports-arn"),
+     exportName: app.logicalPrefixedName("RootSiteImportsTableName")
+    });
+
+    new CfnOutput(this, "rootsiteimports-table-arn", {
+     value: rootSiteImportsTable.tableArn,
+     exportName: app.logicalPrefixedName("RootSiteImportsTableArn")
     });
   }
 }

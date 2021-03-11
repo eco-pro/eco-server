@@ -2,7 +2,6 @@ module DB.Markers.Queries exposing (get, save)
 
 import AWS.Dynamo as Dynamo
 import DB.Markers.Table as MarkersTable
-import DB.TableNames as TableNames
 import Elm.Project
 import Packages.Config exposing (Config)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
@@ -13,7 +12,7 @@ import Url exposing (Url)
 
 ecoMarkersTableName : Conn Config model route msg -> String
 ecoMarkersTableName conn =
-    TableNames.fqTableName "eco-markers" conn
+    (Serverless.Conn.config conn).markersTable
 
 
 get :

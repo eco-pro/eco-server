@@ -1,12 +1,23 @@
-service: eco-server
+service: package-api
+
+custom:
+  # Our stage is based on what is passed in when running serverless
+  # commands. Or falls back to what we have set in the provider section.
+  stage: ${opt:stage, self:provider.stage}
+  # Name of the SST app that's deploying our infrastructure
+  sstApp: ${self:custom.stage}-eco-server
 
 provider:
   name: aws
   runtime: nodejs12.x
   profile: default
   region: eu-west-2
+  stage: dev
   environment:
-    DYNAMODB_NAMESPACE: ${opt:stage, "dev"}
+    stage: ${self:custom.stage}
+    buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
+    rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -16,23 +27,14 @@ provider:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
-      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/*"
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildStatusTableArn
+        - !ImportValue ${self:custom.sstApp}-MarkersTableArn
+        - !ImportValue ${self:custom.sstApp}-RootSiteImportsTableArn
 
 plugins:
   - serverless-webpack
   - serverless-offline
-  - serverless-dynamodb-local
-  - serverless-s3-local
-
-custom:
-  serverless-offline:
-    dontPrintOutput: true
-  dynamodb:
-    stages:
-      - dev
-  s3:
-    host: localhost
-    directory: /tmp
 
 functions:
   packages:
@@ -42,95 +44,3 @@ functions:
           integration: lambda-proxy
           path: /{proxy+}
           method: ANY
-
-resources:
-  Resources:
-    ElmPackagesBucket:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: elm-packages
-
-    ElmBuildLogsBucket:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: elm-build-logs
-
-    BuildStatusTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          - AttributeName: label
-            AttributeType: S
-          - AttributeName: seq
-            AttributeType: N
-          - AttributeName: fqPackage
-            AttributeType: S
-        KeySchema:
-          - AttributeName: label
-            KeyType: HASH
-          - AttributeName: seq
-            KeyType: RANGE
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
-        GlobalSecondaryIndexes:
-          - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus-byfqpackage
-            KeySchema:
-              - AttributeName: fqPackage
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-            ProvisionedThroughput:
-              ReadCapacityUnits: 1
-              WriteCapacityUnits: 1
-
-    MarkersTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          - AttributeName: source
-            AttributeType: S
-        KeySchema:
-          - AttributeName: source
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
-
-    RootSiteImportsTable:
-      Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Delete
-      Properties:
-        AttributeDefinitions:
-          - AttributeName: seq
-            AttributeType: N
-        KeySchema:
-          - AttributeName: seq
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-rootsiteimports
-
-    # ElmPackagesDynamoDBTable:
-    #   Type: 'AWS::DynamoDB::Table'
-    #   DeletionPolicy: Delete
-    #   Properties:
-    #     AttributeDefinitions:
-    #       - AttributeName: name
-    #         AttributeType: S
-    #       - AttributeName: version
-    #         AttributeType: S
-    #     KeySchema:
-    #       - AttributeName: name
-    #         KeyType: HASH
-    #       - AttributeName: version
-    #         KeyType: RANGE
-    #     ProvisionedThroughput:
-    #       ReadCapacityUnits: 1
-    #       WriteCapacityUnits: 1
-    #     TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-packages

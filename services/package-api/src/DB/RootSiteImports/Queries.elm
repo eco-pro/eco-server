@@ -2,7 +2,6 @@ module DB.RootSiteImports.Queries exposing (getBySeq, saveAll)
 
 import AWS.Dynamo as Dynamo
 import DB.RootSiteImports.Table as RootSiteImportsTable
-import DB.TableNames as TableNames
 import Elm.Project
 import Packages.Config exposing (Config)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
@@ -13,7 +12,7 @@ import Url exposing (Url)
 
 rootSiteImportsTableName : Conn Config model route msg -> String
 rootSiteImportsTableName conn =
-    TableNames.fqTableName "eco-rootsiteimports" conn
+    (Serverless.Conn.config conn).rootSiteImportsTable
 
 
 

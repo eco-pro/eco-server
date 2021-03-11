@@ -9,7 +9,6 @@ module DB.BuildStatus.Queries exposing
 import AWS.Dynamo as Dynamo
 import DB.BuildStatus.ByFQPackageIndex as FQPackageIndex
 import DB.BuildStatus.Table as StatusTable
-import DB.TableNames as TableNames
 import Elm.Project
 import Packages.Config exposing (Config)
 import Packages.FQPackage as FQPackage exposing (FQPackage)
@@ -20,12 +19,12 @@ import Url exposing (Url)
 
 ecoBuildStatusTableName : Conn Config model route msg -> String
 ecoBuildStatusTableName conn =
-    TableNames.fqTableName "eco-buildstatus" conn
+    (Serverless.Conn.config conn).buildStatusTable
 
 
 ecoBuildStatusByFQPackageIndexName : Conn Config model route msg -> String
 ecoBuildStatusByFQPackageIndexName conn =
-    TableNames.fqTableName "eco-buildstatus-byfqpackage" conn
+    (Serverless.Conn.config conn).buildStatusTable ++ "-byfqpackage"
 
 
 saveError :
