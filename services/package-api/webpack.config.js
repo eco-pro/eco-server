@@ -19,7 +19,6 @@ const config = {
       use: {
         loader: 'elm-webpack-loader',
         options: {
-          forceWatch: true
         }
       }
     }]
