@@ -1,5 +1,4 @@
 .webpack
-package-lock.json
 elm-stuff
 node_modules
 .serverless
