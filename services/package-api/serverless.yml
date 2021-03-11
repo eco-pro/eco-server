@@ -13,6 +13,7 @@ provider:
   profile: default
   region: eu-west-2
   stage: dev
+  timeout: 120
   environment:
     stage: ${self:custom.stage}
     buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
@@ -27,6 +28,7 @@ provider:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
+        - dynamodb:BatchWriteItem
       Resource:
         - !ImportValue ${self:custom.sstApp}-BuildStatusTableArn
         - !ImportValue ${self:custom.sstApp}-MarkersTableArn

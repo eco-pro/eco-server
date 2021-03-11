@@ -1,6 +1,5 @@
-const rc = require('rc');
-const elmServerless = require('@the-sett/serverless-elm-bridge');
-//const elmServerless = require('/home/rupert/sc/github/the-sett/elm-serverless/src-bridge/index.js');
+//const elmServerless = require('@the-sett/serverless-elm-bridge');
+const elmServerless = require('/home/rupert/sc/github/the-sett/elm-serverless/src-bridge/index.js');
 
 const {
   DynamoDBPorts
@@ -12,9 +11,11 @@ const {
 } = require('./API.elm');
 
 // Use AWS Lambda environment variables to override these values.
-const config = rc('eco-server', {
-  DYNAMODB_NAMESPACE: "dev"
-});
+const config = {
+  buildStatusTable: process.env.buildStatusTable,
+  markersTable: process.env.markersTable,
+  rootSiteImportsTable: process.env.rootSiteImportsTable
+};
 
 const app = Elm.Packages.API.init({
   flags: config
