@@ -1,4 +1,4 @@
-const cdk = require('@aws-cdk/core');
+import { CfnOutput, RemovalPolicy, Duration } from "@aws-cdk/core";
 const ec2 = require("@aws-cdk/aws-ec2");
 const ecs = require("@aws-cdk/aws-ecs");
 const ecs_patterns = require("@aws-cdk/aws-ecs-patterns");
@@ -16,6 +16,8 @@ export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
     super(scope, id, props);
 
+    const app = this.node.root;
+
     // Build Job Queue and Processor.
     const buildJobImage =
       ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', 'build-worker'));
@@ -26,7 +28,17 @@ export default class BuildJobStack extends sst.Stack {
     });
 
     // Build job processing.
-    const queue = new sqs.Queue(this, "buildjob-queue");
+    const queue = new sqs.Queue(this, "build-queue");
+
+    new CfnOutput(this, "build-queue-name", {
+     value: queue.queueName,
+     exportName: app.logicalPrefixedName("BuildQueueName")
+    });
+
+    new CfnOutput(this, "build-queue-arn", {
+     value: queue.queueArn,
+     exportName: app.logicalPrefixedName("BuildQueueArn")
+    });
 
     const logging = new ecs.AwsLogDriver({
       streamPrefix: "eco-build-service"
@@ -36,12 +48,23 @@ export default class BuildJobStack extends sst.Stack {
       vpc: vpc
     });
 
-    const buildService = new ecs_patterns.QueueProcessingFargateService(this, "eco-build-service", {
+    const buildService = new ecs_patterns.QueueProcessingFargateService(this, "ecobuild-service", {
+      serviceName: "BuildService",
       cluster: cluster,
       queue: queue,
       desiredTaskCount: 0,
       maxScalingCapacity: 1,
       image: buildJobImage
+    });
+
+    new CfnOutput(this, "build-service-name", {
+     value: buildService.service.serviceName,
+     exportName: app.logicalPrefixedName("BuildServiceName")
+    });
+
+    new CfnOutput(this, "build-service-arn", {
+     value: buildService.service.serviceArn,
+     exportName: app.logicalPrefixedName("BuildServiceArn")
     });
 
     // Build Job Queue and scaling based on queue size.
@@ -75,7 +98,7 @@ export default class BuildJobStack extends sst.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       evaluationPeriods: 1,
       datapointsToAlarm: 1,
-      period: cdk.Duration.seconds(60)
+      period: Duration.seconds(60)
     });
 
     jobsReadyAlarm.addAlarmAction({
@@ -91,7 +114,7 @@ export default class BuildJobStack extends sst.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
       evaluationPeriods: 1,
       datapointsToAlarm: 1,
-      period: cdk.Duration.seconds(60)
+      period: Duration.seconds(60)
     });
 
     jobsNoneAlarm.addAlarmAction({
