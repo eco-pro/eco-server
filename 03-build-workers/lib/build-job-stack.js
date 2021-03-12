@@ -11,6 +11,7 @@ import * as cloudwatch from '@aws-cdk/aws-cloudwatch';
 import * as sns from '@aws-cdk/aws-sns';
 import { SnsEventSource } from '@aws-cdk/aws-lambda-event-sources';
 const iam = require('@aws-cdk/aws-iam');
+const servicediscovery = require('@aws-cdk/aws-servicediscovery');
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -18,11 +19,6 @@ export default class BuildJobStack extends sst.Stack {
 
     const app = this.node.root;
 
-    // Cloud Map Namespace
-    // const namespace = new servicediscovery.PrivateDnsNamespace(stack, 'MyNamespace', {
-    //   name: 'mydomain.com',
-    //   vpc,
-    // });
 
     // Cloud Map Service
     // const cloudMapService = namespace.createService('MyCloudMapService', {
@@ -65,6 +61,17 @@ export default class BuildJobStack extends sst.Stack {
      value: vpcEndpoint.vpcEndpointId,
      exportName: app.logicalPrefixedName("VpcEndpointId")
     });
+
+    const namespace = new servicediscovery.HttpNamespace(this, 'service-namespace', {
+      name: 'mydomain.com'
+      // vpc
+    });
+
+    new CfnOutput(this, "service-namespace-id", {
+     value: namespace.namespaceId,
+     exportName: app.logicalPrefixedName("ServiceNamespaceId")
+    });
+
 
     // Build job processing.
     const queue = new sqs.Queue(this, "build-queue");

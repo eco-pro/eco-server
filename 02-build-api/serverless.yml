@@ -1,11 +1,26 @@
 service: build-api
 
+plugins:
+  - serverless-webpack
+  - serverless-offline
+  - ./serverless-cloudmap
+
 custom:
   # Our stage is based on what is passed in when running serverless
   # commands. Or falls back to what we have set in the provider section.
   stage: ${opt:stage, self:provider.stage}
   # Name of the SST app that's deploying our infrastructure
   sstApp: ${self:custom.stage}-eco-server
+  cloudmap:
+    services:
+      - cfname: 'BuildApiService' # Cloudformation friendly name
+        name: 'build-api-service' # Service name
+        namespace: !ImportValue ${self:custom.sstApp}-ServiceNamespaceId
+        instances:
+          - cfname: 'BuildApi' # Cloudformation friendly name
+            name: 'buildapi' # Individual, friendly function name
+            arn: { "Fn::GetAtt" : [ BuildapiLambdaFunction, Arn ] } # Arn or reference to your individual serverless function
+            url: { "Fn::Join" : ["", ["https://", { "Ref" : "ApiGatewayRestApi" }, ".execute-api.${self:provider.region}.amazonaws.com/${self:custom.stage}/path/to/resource" ] ]  }
 
 provider:
   name: aws
@@ -56,12 +71,9 @@ provider:
       Resource:
         - !ImportValue ${self:custom.sstApp}-BuildServiceArn
 
-plugins:
-  - serverless-webpack
-  - serverless-offline
 
 functions:
-  packages:
+  buildapi:
     handler: src/Packages/api.handler
     events:
       - http:

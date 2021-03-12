@@ -18,6 +18,7 @@
     "@aws-cdk/aws-ecr-assets": "1.91.0",
     "@aws-cdk/aws-ecs": "1.91.0",
     "@aws-cdk/aws-ecs-patterns": "1.91.0",
+    "@aws-cdk/aws-lambda-event-sources": "1.91.0",
     "@aws-cdk/aws-s3": "1.91.0",
     "@aws-cdk/aws-sns": "1.91.0",
     "@aws-cdk/aws-sqs": "1.91.0",
