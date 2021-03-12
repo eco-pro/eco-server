@@ -1,0 +1,7 @@
+{
+  "name": "eco-server",
+  "type": "@serverless-stack/resources",
+  "stage": "dev",
+  "region": "eu-west-2",
+  "lint": false
+}
