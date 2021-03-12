@@ -18,6 +18,21 @@ export default class BuildJobStack extends sst.Stack {
 
     const app = this.node.root;
 
+    // Cloud Map Namespace
+    // const namespace = new servicediscovery.PrivateDnsNamespace(stack, 'MyNamespace', {
+    //   name: 'mydomain.com',
+    //   vpc,
+    // });
+
+    // Cloud Map Service
+    // const cloudMapService = namespace.createService('MyCloudMapService', {
+    //   dnsRecordType: servicediscovery.DnsRecordType.A,
+    //   dnsTtlSec: 300,
+    //   customHealthCheck: {
+    //     failureThreshold = 1
+    //   }
+    // });
+
     // Build Job Queue and Processor.
     const buildJobImage =
       ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', 'build-worker'));
