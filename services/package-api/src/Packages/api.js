@@ -15,8 +15,6 @@ const config = {
   buildStatusTable: process.env.buildStatusTable,
   markersTable: process.env.markersTable,
   rootSiteImportsTable: process.env.rootSiteImportsTable,
-  buildQueue: process.env.buildQueue,
-  buildService: process.env.buildService
 };
 
 const app = Elm.Packages.API.init({
