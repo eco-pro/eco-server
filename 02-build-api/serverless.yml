@@ -14,6 +14,16 @@ provider:
   region: eu-west-2
   stage: dev
   timeout: 120
+  vpcEndpointIds:
+    - !ImportValue ${self:custom.sstApp}-VpcEndpointId
+  endpointType: PRIVATE
+  resourcePolicy:
+    - Effect: Allow
+      Principal: '*'
+      Action:
+        - execute-api:Invoke
+      Resource:
+        - execute-api:/*
   environment:
     stage: ${self:custom.stage}
     buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
