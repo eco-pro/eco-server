@@ -1,0 +1,8 @@
+.webpack
+elm-stuff
+node_modules
+.serverless
+*.log
+dist
+index.html
+.dynamodb
