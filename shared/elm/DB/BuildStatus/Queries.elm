@@ -11,7 +11,7 @@ import DB.BuildStatus.ByFQPackageIndex as FQPackageIndex
 import DB.BuildStatus.Table as StatusTable
 import Elm.Project
 import Packages.Config exposing (Config)
-import Packages.FQPackage as FQPackage exposing (FQPackage)
+import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Serverless.Conn exposing (Conn)
 import Time exposing (Posix)
 import Url exposing (Url)

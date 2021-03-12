@@ -1,4 +1,4 @@
-module Packages.FQPackage exposing
+module Elm.FQPackage exposing
     ( FQPackage
     , decoder
     , encode

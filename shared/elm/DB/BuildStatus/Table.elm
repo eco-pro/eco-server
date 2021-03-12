@@ -22,7 +22,7 @@ import Elm.Project exposing (Project)
 import Elm.Version exposing (Version)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Packages.FQPackage as FQPackage exposing (FQPackage)
+import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Time exposing (Posix)
 import Url exposing (Url)
 

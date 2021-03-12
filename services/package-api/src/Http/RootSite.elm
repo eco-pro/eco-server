@@ -7,7 +7,7 @@ module Http.RootSite exposing
 
 import Http exposing (Response)
 import Json.Decode as Decode exposing (Decoder)
-import Packages.FQPackage as FQPackage exposing (FQPackage)
+import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Task exposing (Task)
 
 

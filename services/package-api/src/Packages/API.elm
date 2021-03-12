@@ -17,7 +17,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
 import Packages.Config as Config exposing (Config)
-import Packages.FQPackage as FQPackage exposing (FQPackage)
+import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
