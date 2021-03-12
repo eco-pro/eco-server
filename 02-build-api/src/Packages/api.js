@@ -3,7 +3,7 @@ const elmServerless = require('@the-sett/serverless-elm-bridge');
 
 const {
   DynamoDBPorts
-} = require('../../../../shared/js/dynamo.js');
+} = require('../../../shared/js/dynamo.js');
 
 // Import the elm app
 const {
