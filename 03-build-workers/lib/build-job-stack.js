@@ -27,6 +27,30 @@ export default class BuildJobStack extends sst.Stack {
       maxAzs: 1
     });
 
+    new CfnOutput(this, "vpc-id", {
+     value: vpc.vpcId,
+     exportName: app.logicalPrefixedName("VpcId")
+    });
+
+    const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
+      vpc,
+      service: {
+        name: 'com.amazonaws.eu-west-2.execute-api',
+        //name: 'execute-api',
+        port: 443
+      },
+      privateDnsEnabled: true
+      // subnets: {
+      //   subnets: [a, b]
+      // },
+      // securityGroups: [sg]
+    })
+
+    new CfnOutput(this, "vpc-endpoint-id", {
+     value: vpcEndpoint.vpcEndpointId,
+     exportName: app.logicalPrefixedName("VpcEndpointId")
+    });
+
     // Build job processing.
     const queue = new sqs.Queue(this, "build-queue");
 
