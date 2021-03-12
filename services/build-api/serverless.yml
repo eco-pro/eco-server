@@ -1,0 +1,60 @@
+service: build-api
+
+custom:
+  # Our stage is based on what is passed in when running serverless
+  # commands. Or falls back to what we have set in the provider section.
+  stage: ${opt:stage, self:provider.stage}
+  # Name of the SST app that's deploying our infrastructure
+  sstApp: ${self:custom.stage}-eco-server
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  profile: default
+  region: eu-west-2
+  stage: dev
+  timeout: 120
+  environment:
+    stage: ${self:custom.stage}
+    buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
+    rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
+    buildQueue: !ImportValue ${self:custom.sstApp}-BuildQueueName
+    buildService: !ImportValue ${self:custom.sstApp}-BuildServiceName
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:BatchWriteItem
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildStatusTableArn
+        - !ImportValue ${self:custom.sstApp}-MarkersTableArn
+        - !ImportValue ${self:custom.sstApp}-RootSiteImportsTableArn
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildQueueArn
+    - Effect: Allow
+      Action:
+        - ecs:UpdateService
+      Resource:
+        - !ImportValue ${self:custom.sstApp}-BuildServiceArn
+
+plugins:
+  - serverless-webpack
+  - serverless-offline
+
+functions:
+  packages:
+    handler: src/Packages/api.handler
+    events:
+      - http:
+          integration: lambda-proxy
+          path: /{proxy+}
+          method: ANY

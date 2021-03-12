@@ -1,0 +1,15 @@
+{
+  "name": "eco-server-build-api",
+  "version": "1.0.0",
+  "description": "Eco Build API",
+  "scripts": {
+    "start": "serverless offline",
+    "devdb": "sls dynamodb start --migrate --stage dev",
+    "deploy": "serverless deploy",
+    "undeploy": "serverless remove"
+  },
+  "dependencies": {
+    "@the-sett/serverless-elm-bridge": "^4.0.0"
+  },
+  "devDependencies": {}
+}
