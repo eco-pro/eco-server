@@ -21,6 +21,7 @@ custom:
             name: 'buildapi' # Individual, friendly function name
             arn: { "Fn::GetAtt" : [ BuildapiLambdaFunction, Arn ] } # Arn or reference to your individual serverless function
             url: { "Fn::Join" : ["", ["https://", { "Ref" : "ApiGatewayRestApi" }, ".execute-api.${self:provider.region}.amazonaws.com/${self:custom.stage}/path/to/resource" ] ]  }
+            cname: { "Fn::Join" : ["", [ { "Ref" : "ApiGatewayRestApi" }, ".execute-api.${self:provider.region}.amazonaws.com" ] ]  }
 
 provider:
   name: aws

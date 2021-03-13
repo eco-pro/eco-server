@@ -31,6 +31,10 @@ class Cloudmap {
           'Description': service.description,
           'Name': service.name,
           'NamespaceId': service.namespace,
+          'DnsConfig': {
+            'DnsRecords': [ { 'TTL' : 100, 'Type' : 'CNAME' } ],
+            'RoutingPolicy': 'WEIGHTED'
+          }
         },
       };
       service.instances.forEach((instance) => {
@@ -42,6 +46,7 @@ class Cloudmap {
               'handler': instance.name,
               'url': instance.url,
               'type': 'function',
+              'AWS_INSTANCE_CNAME': instance.cname,
               ...instance.config,
             },
             'InstanceId': instance.name,
