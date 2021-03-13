@@ -54,7 +54,10 @@ export default class BuildJobStack extends sst.Stack {
       queue: queue,
       desiredTaskCount: 0,
       maxScalingCapacity: 1,
-      image: buildJobImage
+      image: buildJobImage,
+      environment: {
+        'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/'
+      }
     });
 
     new CfnOutput(this, "build-service-name", {
