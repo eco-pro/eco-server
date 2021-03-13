@@ -19,65 +19,15 @@ export default class BuildJobStack extends sst.Stack {
 
     const app = this.node.root;
 
-
-    // Cloud Map Service
-    // const cloudMapService = namespace.createService('MyCloudMapService', {
-    //   dnsRecordType: servicediscovery.DnsRecordType.A,
-    //   dnsTtlSec: 300,
-    //   customHealthCheck: {
-    //     failureThreshold = 1
-    //   }
-    // });
+    // Loop up the VPC where this is to be dpeloyed.
+    const vpc = ec2.Vpc.fromLookup(this, "vpc", {
+        tags: { 'vpc-name': 'eco-server-vpc'}
+    });
 
     // Build Job Queue and Processor.
     const buildJobImage =
       ecs.ContainerImage.fromAsset(path.join(__dirname, '..', '..', 'build-worker'));
 
-    // VPC Network Segment.
-    const vpc = new ec2.Vpc(this, "vpc", {
-      maxAzs: 1
-    });
-
-    new CfnOutput(this, "vpc-id", {
-     value: vpc.vpcId,
-     exportName: app.logicalPrefixedName("VpcId")
-    });
-
-    const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
-      vpc,
-      service: {
-        name: 'com.amazonaws.eu-west-2.execute-api',
-        //name: 'execute-api',
-        port: 443
-      },
-      privateDnsEnabled: true
-      // subnets: {
-      //   subnets: [a, b]
-      // },
-      // securityGroups: [sg]
-    })
-
-    new CfnOutput(this, "vpc-endpoint-id", {
-     value: vpcEndpoint.vpcEndpointId,
-     exportName: app.logicalPrefixedName("VpcEndpointId")
-    });
-
-    // const namespace = new servicediscovery.HttpNamespace(this, 'service-namespace', {
-    //   name: 'mydomain.com'
-    //   // vpc
-    // });
-    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'service-namespace', {
-      name: 'mydomain.com',
-      vpc
-    });
-
-    new CfnOutput(this, "service-namespace-id", {
-     value: namespace.namespaceId,
-     exportName: app.logicalPrefixedName("ServiceNamespaceId")
-    });
-
-
-    // Build job processing.
     const queue = new sqs.Queue(this, "build-queue");
 
     new CfnOutput(this, "build-queue-name", {
