@@ -62,9 +62,13 @@ export default class BuildJobStack extends sst.Stack {
      exportName: app.logicalPrefixedName("VpcEndpointId")
     });
 
-    const namespace = new servicediscovery.HttpNamespace(this, 'service-namespace', {
-      name: 'mydomain.com'
-      // vpc
+    // const namespace = new servicediscovery.HttpNamespace(this, 'service-namespace', {
+    //   name: 'mydomain.com'
+    //   // vpc
+    // });
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'service-namespace', {
+      name: 'mydomain.com',
+      vpc
     });
 
     new CfnOutput(this, "service-namespace-id", {
