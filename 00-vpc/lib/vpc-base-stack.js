@@ -20,7 +20,9 @@ export default class VpcBaseStack extends sst.Stack {
 
     // VPC Network Segment.
     const vpc = new ec2.Vpc(this, "vpc", {
-      maxAzs: 1
+      maxAzs: 1,
+      enableDnsSupport: true,
+      enableDnsHostnames: true
     });
 
     Tags.of(vpc).add('vpc-name', 'eco-server-vpc');
