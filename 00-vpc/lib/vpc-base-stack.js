@@ -32,19 +32,19 @@ export default class VpcBaseStack extends sst.Stack {
      exportName: app.logicalPrefixedName("VpcId")
     });
 
-    const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
-      vpc,
-      service: {
-        name: 'com.amazonaws.eu-west-2.execute-api',
-        port: 443
-      },
-      privateDnsEnabled: true
-    })
-
-    new CfnOutput(this, "vpc-endpoint-id", {
-     value: vpcEndpoint.vpcEndpointId,
-     exportName: app.logicalPrefixedName("VpcEndpointId")
-    });
+    // const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
+    //   vpc,
+    //   service: {
+    //     name: 'com.amazonaws.eu-west-2.execute-api',
+    //     port: 443
+    //   },
+    //   privateDnsEnabled: true
+    // })
+    //
+    // new CfnOutput(this, "vpc-endpoint-id", {
+    //  value: vpcEndpoint.vpcEndpointId,
+    //  exportName: app.logicalPrefixedName("VpcEndpointId")
+    // });
 
     const namespace = new servicediscovery.PrivateDnsNamespace(this, 'service-namespace', {
       name: 'mydomain.com',

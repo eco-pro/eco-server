@@ -30,9 +30,9 @@ provider:
   region: eu-west-2
   stage: dev
   timeout: 120
-  vpcEndpointIds:
-    - !ImportValue ${self:custom.sstApp}-VpcEndpointId
-  endpointType: PRIVATE
+  # vpcEndpointIds:
+  #   - !ImportValue ${self:custom.sstApp}-VpcEndpointId
+  # endpointType: PRIVATE
   resourcePolicy:
     - Effect: Allow
       Principal: '*'
