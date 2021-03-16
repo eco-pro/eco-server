@@ -66,7 +66,7 @@ export default class PackageDBStack extends Stack {
     buildStatusTable.addGlobalSecondaryIndex({
       indexName: "buildstatus-byfqpackage",
       projectType: dynamodb.ProjectionType.ALL,
-      partitionKey: { name: "fqPacakge", type: dynamodb.AttributeType.STRING }
+      partitionKey: { name: "fqPackage", type: dynamodb.AttributeType.STRING }
     });
 
     new CfnOutput(this, "build-status-table-name", {
@@ -77,6 +77,11 @@ export default class PackageDBStack extends Stack {
     new CfnOutput(this, "build-status-table-arn", {
      value: buildStatusTable.tableArn,
      exportName: app.logicalPrefixedName("BuildStatusTableArn")
+    });
+
+    new CfnOutput(this, "build-status-by-fqpackage-index", {
+     value: "buildstatus-byfqpackage",
+     exportName: app.logicalPrefixedName("BuildStatusByFQPackageIndex")
     });
 
     const markersTable = new dynamodb.Table(this, "markers", {

@@ -17,6 +17,7 @@ provider:
   environment:
     stage: ${self:custom.stage}
     buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
     markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
   iamRoleStatements:
@@ -24,9 +25,10 @@ provider:
       Action:
         - dynamodb:Query
         - dynamodb:Scan
-        - dynamodb:GetItem        
+        - dynamodb:GetItem
       Resource:
         - !ImportValue ${self:custom.sstApp}-BuildStatusTableArn
+        - { "Fn::Join" : ["", [{"Fn::ImportValue": "${self:custom.sstApp}-BuildStatusTableArn"}, "/index/*" ] ] }
         - !ImportValue ${self:custom.sstApp}-MarkersTableArn
         - !ImportValue ${self:custom.sstApp}-RootSiteImportsTableArn
 

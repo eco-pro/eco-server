@@ -13,6 +13,7 @@ const {
 // Use AWS Lambda environment variables to override these values.
 const config = {
   buildStatusTable: process.env.buildStatusTable,
+  buildStatusByFQPackageIndex: process.env.buildStatusByFQPackageIndex,
   markersTable: process.env.markersTable,
   rootSiteImportsTable: process.env.rootSiteImportsTable,
 };

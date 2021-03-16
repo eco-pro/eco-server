@@ -43,6 +43,7 @@ provider:
   environment:
     stage: ${self:custom.stage}
     buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
     markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
     # buildQueue: !ImportValue ${self:custom.sstApp}-BuildQueueName
