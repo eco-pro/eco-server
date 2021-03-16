@@ -17,8 +17,12 @@ from botocore.exceptions import ClientError
 config = {
     # 'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
     # 'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    'DISCOVERY_NAMESPACE': 'mydomain.com',
+    'BUILD_API_SERVICE': 'build-api-service',
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
-    'S3_ENDPOINT': os.environ.get('S3_ENDPOINT')
+    'S3_ENDPOINT': os.environ.get('S3_ENDPOINT'),
+    'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
+    'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
 }
 
 print(config)
@@ -169,12 +173,15 @@ def compile_elm(author,
                 workingDir=None,
                 compiler="elm"):
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    log_bucket_name = "elm-build-logs"
+    log_bucket_name = config['BUILD_LOGS_BUCKET_NAME']
 
     log_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.txt"
     json_report_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.json"
+
+    print("log_bucket_name = " + log_bucket_name)
+    print("log_file_name = " + log_file_name)
 
     # Compile with human readable output logged.
     try:
@@ -207,7 +214,7 @@ def compile_elm(author,
         try:
             errorJson = json.loads(errorString, strict=False)
         except JSONDecodeError:
-            errorJson = {"error": "Error decoding JSON report." }
+            errorJson = {"error": "Error decoding JSON report."}
 
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
@@ -223,10 +230,8 @@ def compile_elm(author,
         report_compile_error(seq=seq,
                              version="0.19.1",
                              errors=errorJson,
-                             compileLogUrl=config['S3_ENDPOINT'] +
-                             log_bucket_name + "/" + log_file_name,
-                             jsonReportUrl=config['S3_ENDPOINT'] +
-                             log_bucket_name + "/" + json_report_file_name,
+                             compileLogUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + log_file_name,
+                             jsonReportUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + json_report_file_name,
                              zip_hash=zip_hash,
                              content_hash=content_hash)
         return False
@@ -252,10 +257,7 @@ def upload_file(file_name, bucket, object_name=None):
         object_name = file_name
 
     # Upload the file
-    s3 = boto3.resource(
-        service_name="s3",
-        endpoint_url=config['S3_ENDPOINT'],
-    )
+    s3 = boto3.resource('s3')
 
     try:
         s3.Object(bucket, object_name).put(Body=open(file_name, 'rb'))
@@ -266,6 +268,23 @@ def upload_file(file_name, bucket, object_name=None):
 
 
 print("====== Eco-Server Elm Package Build Script ======")
+
+# Find the build API service.
+print("\n=== Looking for the build API service.")
+discovery_namespace = config['DISCOVERY_NAMESPACE']
+build_api_service = config['BUILD_API_SERVICE']
+
+sdclient = boto3.client('servicediscovery')
+discovery_response = sdclient.discover_instances(
+    NamespaceName=discovery_namespace,
+    ServiceName=build_api_service
+    )
+
+if not discovery_response['Instances']:
+    print("Failed to discover the build API service.")
+
+config['PACKAGE_API_ROOT'] = discovery_response['Instances'][0]['Attributes']['url']
+print("Got build API root URL: " + config['PACKAGE_API_ROOT'])
 
 start_dir = os.getcwd()
 
@@ -337,6 +356,7 @@ while True:
     try:
         with open(workingDir + "/elm.json") as json_file:
             data = json.load(json_file)
+            print("= elm.json is:\n" + json.dumps(data, indent=4, sort_keys=True))
 
             elmCompilerVersion = data['elm-version']
 
@@ -371,7 +391,7 @@ while True:
     # Copy the package .zip onto its S3 location.
 
     print("Copying the package onto S3...")
-    upload_file(archive_name, "elm-packages", object_name=archive_name)
+    upload_file(archive_name, config['PACKAGE_BUCKET_NAME'], object_name=archive_name)
     os.remove(archive_name)
 
     # POST to the package server to tell it the job is complete.

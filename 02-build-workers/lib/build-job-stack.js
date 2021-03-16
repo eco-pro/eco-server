@@ -1,4 +1,4 @@
-import { CfnOutput, RemovalPolicy, Duration } from "@aws-cdk/core";
+import { CfnOutput, RemovalPolicy, Duration, Fn } from "@aws-cdk/core";
 const ec2 = require("@aws-cdk/aws-ec2");
 const ecs = require("@aws-cdk/aws-ecs");
 const ecs_patterns = require("@aws-cdk/aws-ecs-patterns");
@@ -12,6 +12,7 @@ import * as sns from '@aws-cdk/aws-sns';
 import { SnsEventSource } from '@aws-cdk/aws-lambda-event-sources';
 const iam = require('@aws-cdk/aws-iam');
 const servicediscovery = require('@aws-cdk/aws-servicediscovery');
+import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -56,9 +57,29 @@ export default class BuildJobStack extends sst.Stack {
       maxScalingCapacity: 1,
       image: buildJobImage,
       environment: {
-        'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/'
+        'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/',
+        'S3_ENDPOINT': 'https://s3buckets.wherever.com/',
+        'PACKAGE_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmPackageBucketName')),
+        'BUILD_LOGS_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketName'))
       }
     });
+
+    buildService.taskDefinition.addToTaskRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        resources: ['*'],
+        actions: ['servicediscovery:DiscoverInstances']
+      }));
+
+    buildService.taskDefinition.addToTaskRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        resources: [
+          Fn.importValue(app.logicalPrefixedName('ElmPackageBucketArn')),
+          Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketArn'))
+        ],
+        actions: ['s3:*']
+      }));
 
     new CfnOutput(this, "build-service-name", {
      value: buildService.service.serviceName,

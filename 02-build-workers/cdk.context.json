@@ -1,35 +1,30 @@
 {
-  "availability-zones:account=345745834314:region=eu-west-2": [
-    "eu-west-2a",
-    "eu-west-2b",
-    "eu-west-2c"
-  ],
   "vpc-provider:account=345745834314:filter.tag:vpc-name=eco-server-vpc:region=eu-west-2:returnAsymmetricSubnets=true": {
-    "vpcId": "vpc-01cacde3b39e26ef4",
+    "vpcId": "vpc-04a61b972b431c5a0",
     "vpcCidrBlock": "10.0.0.0/16",
     "availabilityZones": [],
     "subnetGroups": [
-      {
-        "name": "Public",
-        "type": "Public",
-        "subnets": [
-          {
-            "subnetId": "subnet-01b3957cb12ab9184",
-            "cidr": "10.0.0.0/17",
-            "availabilityZone": "eu-west-2a",
-            "routeTableId": "rtb-0d18c868bedc1f66b"
-          }
-        ]
-      },
       {
         "name": "Private",
         "type": "Private",
         "subnets": [
           {
-            "subnetId": "subnet-0b1c3f61abb396491",
+            "subnetId": "subnet-0d1c8318762947671",
             "cidr": "10.0.128.0/17",
             "availabilityZone": "eu-west-2a",
-            "routeTableId": "rtb-0547bcd161bd6f20e"
+            "routeTableId": "rtb-06979a9e7eb13ae4c"
+          }
+        ]
+      },
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-0b17df976fc918705",
+            "cidr": "10.0.0.0/17",
+            "availabilityZone": "eu-west-2a",
+            "routeTableId": "rtb-006194437980086e1"
           }
         ]
       }
