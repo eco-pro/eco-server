@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 config = {
     # 'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
     # 'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'),
     'DISCOVERY_NAMESPACE': 'mydomain.com',
     'BUILD_API_SERVICE': 'build-api-service',
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
@@ -27,6 +28,8 @@ config = {
 
 print(config)
 
+session = boto3.session.Session()
+print(session.get_credentials().get_frozen_credentials())
 
 def calc_zip_file_sha1(zip_file_name):
     """
@@ -257,7 +260,7 @@ def upload_file(file_name, bucket, object_name=None):
         object_name = file_name
 
     # Upload the file
-    s3 = boto3.resource('s3')
+    s3 = session.resource('s3')
 
     try:
         s3.Object(bucket, object_name).put(Body=open(file_name, 'rb'))
@@ -274,7 +277,7 @@ print("\n=== Looking for the build API service.")
 discovery_namespace = config['DISCOVERY_NAMESPACE']
 build_api_service = config['BUILD_API_SERVICE']
 
-sdclient = boto3.client('servicediscovery')
+sdclient = session.client('servicediscovery')
 discovery_response = sdclient.discover_instances(
     NamespaceName=discovery_namespace,
     ServiceName=build_api_service
@@ -282,6 +285,7 @@ discovery_response = sdclient.discover_instances(
 
 if not discovery_response['Instances']:
     print("Failed to discover the build API service.")
+    quit()
 
 config['PACKAGE_API_ROOT'] = discovery_response['Instances'][0]['Attributes']['url']
 print("Got build API root URL: " + config['PACKAGE_API_ROOT'])
@@ -356,7 +360,6 @@ while True:
     try:
         with open(workingDir + "/elm.json") as json_file:
             data = json.load(json_file)
-            print("= elm.json is:\n" + json.dumps(data, indent=4, sort_keys=True))
 
             elmCompilerVersion = data['elm-version']
 

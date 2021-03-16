@@ -2,6 +2,7 @@ import { Api, Stack, Table, TableFieldType } from "@serverless-stack/resources";
 import { CfnOutput, RemovalPolicy } from "@aws-cdk/core";
 import * as s3 from "@aws-cdk/aws-s3";
 import * as dynamodb from "@aws-cdk/aws-dynamodb";
+import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
 
 export default class PackageDBStack extends Stack {
   constructor(scope, id, props) {
@@ -13,7 +14,8 @@ export default class PackageDBStack extends Stack {
     const packagesBucket = new s3.Bucket(this, 'elm-packages', {
       versioned: false,
       autoDeleteObjects: true,
-      removalPolicy: RemovalPolicy.DESTROY
+      removalPolicy: RemovalPolicy.DESTROY,
+      publicReadAccess: true
     });
 
     new CfnOutput(this, "elm-packages-bucket-name", {
@@ -29,8 +31,19 @@ export default class PackageDBStack extends Stack {
     const buildLogsBucket = new s3.Bucket(this, 'elm-build-logs', {
       versioned: false,
       autoDeleteObjects: true,
-      removalPolicy: RemovalPolicy.DESTROY
+      removalPolicy: RemovalPolicy.DESTROY,
+      publicReadAccess: true
     });
+
+    // buildLogsBucket.addToResourcePolicy(new PolicyStatement({
+    //   effect: Effect.ALLOW,
+    //   actions: ["s3:*"],
+    //   resources: [
+    //     buildLogsBucket.bucketArn,
+    //     buildLogsBucket.bucketArn + "/*"
+    //   ],
+    //   principal: ["*"]// -- Seems to need a principal
+    // }));
 
     new CfnOutput(this, "elm-build-logs-bucket-name", {
      value: buildLogsBucket.bucketName,

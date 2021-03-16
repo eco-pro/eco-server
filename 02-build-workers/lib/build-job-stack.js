@@ -13,6 +13,7 @@ import { SnsEventSource } from '@aws-cdk/aws-lambda-event-sources';
 const iam = require('@aws-cdk/aws-iam');
 const servicediscovery = require('@aws-cdk/aws-servicediscovery');
 import { Effect, PolicyStatement } from '@aws-cdk/aws-iam';
+import { RetentionDays} from '@aws-cdk/aws-logs';
 
 export default class BuildJobStack extends sst.Stack {
   constructor(scope, id, props) {
@@ -42,20 +43,34 @@ export default class BuildJobStack extends sst.Stack {
     });
 
     const logging = new ecs.AwsLogDriver({
-      streamPrefix: "eco-build-service"
+      streamPrefix: "eco-build-service",
+      logRetention: RetentionDays.ONE_DAY
     });
 
     const cluster = new ecs.Cluster(this, "ecs-cluster", {
       vpc: vpc
     });
 
-    const buildService = new ecs_patterns.QueueProcessingFargateService(this, "ecobuild-service", {
-      serviceName: "BuildService",
-      cluster: cluster,
-      queue: queue,
-      desiredTaskCount: 0,
-      maxScalingCapacity: 1,
+    // const buildService = new ecs_patterns.QueueProcessingFargateService(this, "ecobuild-service", {
+    //   serviceName: "BuildService",
+    //   cluster: cluster,
+    //   queue: queue,
+    //   desiredTaskCount: 0,
+    //   maxScalingCapacity: 1,
+    //   image: buildJobImage,
+    //   environment: {
+    //     'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/',
+    //     'S3_ENDPOINT': 'https://s3buckets.wherever.com/',
+    //     'PACKAGE_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmPackageBucketName')),
+    //     'BUILD_LOGS_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketName'))
+    //   }
+    // });
+    const buildTask = new ecs.FargateTaskDefinition(this, "build-task", {
+    });
+
+    buildTask.addContainer("build-service-task", {
       image: buildJobImage,
+      logging: logging,
       environment: {
         'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/',
         'S3_ENDPOINT': 'https://s3buckets.wherever.com/',
@@ -64,14 +79,14 @@ export default class BuildJobStack extends sst.Stack {
       }
     });
 
-    buildService.taskDefinition.addToTaskRolePolicy(
+    buildTask.addToTaskRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
         resources: ['*'],
         actions: ['servicediscovery:DiscoverInstances']
       }));
 
-    buildService.taskDefinition.addToTaskRolePolicy(
+    buildTask.addToTaskRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
         resources: [
@@ -81,70 +96,70 @@ export default class BuildJobStack extends sst.Stack {
         actions: ['s3:*']
       }));
 
-    new CfnOutput(this, "build-service-name", {
-     value: buildService.service.serviceName,
-     exportName: app.logicalPrefixedName("BuildServiceName")
-    });
+    // new CfnOutput(this, "build-task-name", {
+    //  value: buildService.service.serviceName,
+    //  exportName: app.logicalPrefixedName("BuildServiceName")
+    // });
 
-    new CfnOutput(this, "build-service-arn", {
-     value: buildService.service.serviceArn,
-     exportName: app.logicalPrefixedName("BuildServiceArn")
+    new CfnOutput(this, "build-task-arn", {
+     value: buildTask.taskDefinitionArn,
+     exportName: app.logicalPrefixedName("BuildTaskArn")
     });
 
     // Build Job Queue and scaling based on queue size.
     // If the queue shrinks to zero, no build jobs will run.
     // If the queue grows to one or more, one build job will run.
-    const jobScalingTopic = new sns.Topic(this, 'job-scale', {
-         displayName: 'Topic for Scaling Build Job Fargate Tasks'
-    });
-
-    const scalingHandler = new sst.Function(this, "scaling-handler", {
-      handler: "src/scaling.handleAlarm",
-      environment: {
-        BUILD_CLUSTER_ARN: cluster.clusterArn,
-        BUILD_SERVICE_ARN: buildService.service.serviceArn,
-        BUILD_SERVICE_NAME: buildService.service.serviceName
-      },
-    });
-
-    scalingHandler.addEventSource(new SnsEventSource(jobScalingTopic, {}));
-
-    const scalingPolicy = new iam.PolicyStatement();
-    scalingPolicy.addActions("ecs:UpdateService");
-    scalingPolicy.addResources("*");
-
-    scalingHandler.addToRolePolicy(scalingPolicy);
-
-    const jobsReadyAlarm = new cloudwatch.Alarm(this, 'jobs-ready', {
-      alarmName: "BuildJobQueue#Ready",
-      metric: queue.metric("ApproximateNumberOfMessagesVisible"),
-      threshold: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      period: Duration.seconds(60)
-    });
-
-    jobsReadyAlarm.addAlarmAction({
-      bind(scope, alarm) {
-        return { alarmActionArn: jobScalingTopic.topicArn };
-      }
-    });
-
-    const jobsNoneAlarm = new cloudwatch.Alarm(this, 'jobs-none', {
-      alarmName: "BuildJobQueue#Empty",
-      metric: queue.metric("ApproximateNumberOfMessagesVisible"),
-      threshold: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      period: Duration.seconds(60)
-    });
-
-    jobsNoneAlarm.addAlarmAction({
-      bind(scope, alarm) {
-        return { alarmActionArn: jobScalingTopic.topicArn };
-      }
-    });
+    // const jobScalingTopic = new sns.Topic(this, 'job-scale', {
+    //      displayName: 'Topic for Scaling Build Job Fargate Tasks'
+    // });
+    //
+    // const scalingHandler = new sst.Function(this, "scaling-handler", {
+    //   handler: "src/scaling.handleAlarm",
+    //   environment: {
+    //     BUILD_CLUSTER_ARN: cluster.clusterArn,
+    //     BUILD_SERVICE_ARN: buildService.service.serviceArn,
+    //     BUILD_SERVICE_NAME: buildService.service.serviceName
+    //   },
+    // });
+    //
+    // scalingHandler.addEventSource(new SnsEventSource(jobScalingTopic, {}));
+    //
+    // const scalingPolicy = new iam.PolicyStatement();
+    // scalingPolicy.addActions("ecs:UpdateService");
+    // scalingPolicy.addResources("*");
+    //
+    // scalingHandler.addToRolePolicy(scalingPolicy);
+    //
+    // const jobsReadyAlarm = new cloudwatch.Alarm(this, 'jobs-ready', {
+    //   alarmName: "BuildJobQueue#Ready",
+    //   metric: queue.metric("ApproximateNumberOfMessagesVisible"),
+    //   threshold: 1,
+    //   comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    //   evaluationPeriods: 1,
+    //   datapointsToAlarm: 1,
+    //   period: Duration.seconds(60)
+    // });
+    //
+    // jobsReadyAlarm.addAlarmAction({
+    //   bind(scope, alarm) {
+    //     return { alarmActionArn: jobScalingTopic.topicArn };
+    //   }
+    // });
+    //
+    // const jobsNoneAlarm = new cloudwatch.Alarm(this, 'jobs-none', {
+    //   alarmName: "BuildJobQueue#Empty",
+    //   metric: queue.metric("ApproximateNumberOfMessagesVisible"),
+    //   threshold: 1,
+    //   comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+    //   evaluationPeriods: 1,
+    //   datapointsToAlarm: 1,
+    //   period: Duration.seconds(60)
+    // });
+    //
+    // jobsNoneAlarm.addAlarmAction({
+    //   bind(scope, alarm) {
+    //     return { alarmActionArn: jobScalingTopic.topicArn };
+    //   }
+    // });
   }
 }
