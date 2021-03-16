@@ -91,7 +91,9 @@ export default class BuildJobStack extends sst.Stack {
         effect: Effect.ALLOW,
         resources: [
           Fn.importValue(app.logicalPrefixedName('ElmPackageBucketArn')),
-          Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketArn'))
+          Fn.importValue(app.logicalPrefixedName('ElmPackageBucketArn')) + "/*",
+          Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketArn')),
+          Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketArn')) + "/*"
         ],
         actions: ['s3:*']
       }));
