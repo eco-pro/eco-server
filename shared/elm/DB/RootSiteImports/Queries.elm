@@ -1,16 +1,19 @@
-module DB.RootSiteImports.Queries exposing (getBySeq, saveAll)
+module DB.RootSiteImports.Queries exposing (Config, getBySeq, saveAll)
 
 import AWS.Dynamo as Dynamo
 import DB.RootSiteImports.Table as RootSiteImportsTable
-import Elm.Project
-import Packages.Config exposing (Config)
 import Elm.FQPackage as FQPackage exposing (FQPackage)
+import Elm.Project
 import Serverless.Conn exposing (Conn)
 import Time exposing (Posix)
 import Url exposing (Url)
 
 
-rootSiteImportsTableName : Conn Config model route msg -> String
+type alias Config c =
+    { c | rootSiteImportsTable : String }
+
+
+rootSiteImportsTableName : Conn (Config c) model route msg -> String
 rootSiteImportsTableName conn =
     (Serverless.Conn.config conn).rootSiteImportsTable
 
@@ -24,8 +27,8 @@ saveAll :
     -> List RootSiteImportsTable.Record
     -> (Dynamo.PutResponse -> msg)
     -> (Dynamo.Msg msg -> msg)
-    -> Conn Config model route msg
-    -> ( Conn Config model route msg, Cmd msg )
+    -> Conn (Config c) model route msg
+    -> ( Conn (Config c) model route msg, Cmd msg )
 saveAll timestamp packages responseFn dynamoMsgFn conn =
     Dynamo.batchPut
         (rootSiteImportsTableName conn)
@@ -39,8 +42,8 @@ saveAll timestamp packages responseFn dynamoMsgFn conn =
 getBySeq :
     Int
     -> (Dynamo.GetResponse RootSiteImportsTable.Record -> msg)
-    -> Conn Config model route msg
-    -> ( Conn Config model route msg, Cmd msg )
+    -> Conn (Config c) model route msg
+    -> ( Conn (Config c) model route msg, Cmd msg )
 getBySeq seq responseFn conn =
     Dynamo.get
         (rootSiteImportsTableName conn)
