@@ -21,7 +21,6 @@ config = {
     'DISCOVERY_NAMESPACE': 'mydomain.com',
     'BUILD_API_SERVICE': 'build-api-service',
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
-    'S3_ENDPOINT': os.environ.get('S3_ENDPOINT'),
     'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
 }
@@ -233,8 +232,8 @@ def compile_elm(author,
         report_compile_error(seq=seq,
                              version="0.19.1",
                              errors=errorJson,
-                             compileLogUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + log_file_name,
-                             jsonReportUrl=config['S3_ENDPOINT'] + log_bucket_name + "/" + json_report_file_name,
+                             compileLogUrl='https://' log_bucket_name + '.s3.amazonaws.com/' + log_file_name,
+                             jsonReportUrl='https://' log_bucket_name + '.s3.amazonaws.com/' + json_report_file_name,
                              zip_hash=zip_hash,
                              content_hash=content_hash)
         return False
