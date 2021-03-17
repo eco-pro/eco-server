@@ -14,9 +14,8 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
+# Use OFFLINE_MODE=false
 config = {
-    # 'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
-    # 'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
     'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'),
     'DISCOVERY_NAMESPACE': 'mydomain.com',
     'BUILD_API_SERVICE': 'build-api-service',
@@ -24,6 +23,14 @@ config = {
     'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
 }
+
+# Use OFFLINE_MODE=true
+# config = {
+#     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
+#     'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
+#     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
+# }
+
 
 print(config)
 
