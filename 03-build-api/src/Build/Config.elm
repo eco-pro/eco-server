@@ -1,4 +1,4 @@
-module Packages.Config exposing (Config, configDecoder)
+module Build.Config exposing (Config, configDecoder)
 
 import Json.Decode as Decode exposing (Decoder)
 

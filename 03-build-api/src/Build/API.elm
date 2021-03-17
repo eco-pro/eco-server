@@ -1,6 +1,7 @@
-port module Packages.API exposing (main)
+port module Build.API exposing (main)
 
 import AWS.Dynamo as Dynamo
+import Build.Config as Config exposing (Config)
 import DB.BuildStatus.Queries as StatusQueries
 import DB.BuildStatus.Table as StatusTable
 import DB.Markers.Queries as MarkersQueries
@@ -17,7 +18,6 @@ import Http.RootSite as RootSite
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
-import Packages.Config as Config exposing (Config)
 import Parser exposing (Parser)
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)

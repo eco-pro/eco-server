@@ -20,7 +20,7 @@ const config = {
   buildService: process.env.buildService
 };
 
-const app = Elm.Packages.API.init({
+const app = Elm.Build.API.init({
   flags: config
 });
 

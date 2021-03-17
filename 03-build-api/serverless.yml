@@ -60,7 +60,7 @@ provider:
 
 functions:
   buildapi:
-    handler: src/Packages/api.handler
+    handler: src/Build/api.handler
     events:
       - http:
           integration: lambda-proxy
