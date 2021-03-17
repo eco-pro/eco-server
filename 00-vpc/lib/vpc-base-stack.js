@@ -8,7 +8,7 @@ Set up the VPC for the package server. This includes:
 
 - The VPC itself, tagged with:
     vpc-name = eco-server-vpc
-- A VPC Interface Endpoint (a private API gateway instance).
+- A VPC Interface Endpoint (a Private Link to API gateway).
 - A Private DNS Namespace for the VPC as a service registry.
 
 */

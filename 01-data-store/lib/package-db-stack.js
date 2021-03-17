@@ -35,16 +35,6 @@ export default class PackageDBStack extends Stack {
       publicReadAccess: true
     });
 
-    // buildLogsBucket.addToResourcePolicy(new PolicyStatement({
-    //   effect: Effect.ALLOW,
-    //   actions: ["s3:*"],
-    //   resources: [
-    //     buildLogsBucket.bucketArn,
-    //     buildLogsBucket.bucketArn + "/*"
-    //   ],
-    //   principal: ["*"]// -- Seems to need a principal
-    // }));
-
     new CfnOutput(this, "elm-build-logs-bucket-name", {
      value: buildLogsBucket.bucketName,
      exportName: app.logicalPrefixedName("ElmBuildLogsBucketName")
