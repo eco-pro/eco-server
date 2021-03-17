@@ -232,8 +232,8 @@ def compile_elm(author,
         report_compile_error(seq=seq,
                              version="0.19.1",
                              errors=errorJson,
-                             compileLogUrl='https://' log_bucket_name + '.s3.amazonaws.com/' + log_file_name,
-                             jsonReportUrl='https://' log_bucket_name + '.s3.amazonaws.com/' + json_report_file_name,
+                             compileLogUrl='https://' + log_bucket_name + '.s3.amazonaws.com/' + log_file_name,
+                             jsonReportUrl='https://' + log_bucket_name + '.s3.amazonaws.com/' + json_report_file_name,
                              zip_hash=zip_hash,
                              content_hash=content_hash)
         return False
@@ -399,11 +399,14 @@ while True:
     # POST to the package server to tell it the job is complete.
 
     print("Letting the package server know where to find it...")
+    package_bucket_name = config['PACKAGE_BUCKET_NAME']
     req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/ready",
              json={"elmJson": data,
-                   "url": "http://localhost:4569/elm-packages/" + archive_name,
+                   "url": 'https://' + package_bucket_name + '.s3.amazonaws.com/' + archive_name,
                    "sha1ZipArchive": zip_hash,
                    "sha1PackageContents": content_hash})
+
+
 
     print("Job done. Try looking for the next job...")
 
