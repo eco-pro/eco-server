@@ -20,18 +20,33 @@ provider:
 
 plugins:
   - serverless-offline
-  - serverless-dynamodb-local
-  - serverless-s3-local
+  - serverless-localstack
 
+# custom:
+#   dynamodb:
+#     stages:
+#       - dev
+#   s3:
+#     host: localhost
+#     directory: /tmp
 custom:
   serverless-offline:
     dontPrintOutput: true
-  dynamodb:
+  localstack:
     stages:
-      - dev
-  s3:
-    host: localhost
-    directory: /tmp
+      # list of stages for which the plugin should be enabled
+      - local
+    host: http://localhost  # optional - LocalStack host to connect to
+    edgePort: 4566  # optional - LocalStack edge port to connect to
+    autostart: true  # optional - Start LocalStack in Docker on Serverless deploy
+    lambda:
+      # Enable this flag to improve performance
+      mountCode: True
+    docker:
+      # Enable this flag to run "docker ..." commands as sudo
+      sudo: False
+  stages:
+    local:
 
 resources:
   Resources:
