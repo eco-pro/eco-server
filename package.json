@@ -17,13 +17,5 @@
     "serverless-webpack": "^4.1.0",
     "webpack": "^3.8.1",
     "webpack-stream": "^4.0.0"
-  },
-  "flarb": {
-    "cf-utils": "^1.0.2",
-    "del": "^3.0.0",
-    "inquirer": "^3.3.0",
-    "newman": "^4.5.1",
-    "ps-list": "^4.0.0",
-    "vinyl-paths": "^2.1.0"
   }
 }
