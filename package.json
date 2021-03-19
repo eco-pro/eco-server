@@ -11,7 +11,7 @@
     "elm": "latest-0.19.1",
     "elm-webpack-loader": "^7.0.1",
     "serverless": "^1.45.1",
-    "serverless-offline": "^3.16.0",
+    "serverless-offline": "^6.8.0",
     "serverless-webpack": "^4.1.0",
     "webpack": "^3.8.1",
     "webpack-stream": "^4.0.0"

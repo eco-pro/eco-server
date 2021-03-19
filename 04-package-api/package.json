@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "description": "Eco Package API",
   "scripts": {
-    "start": "serverless offline",
-    "devdb": "sls dynamodb start --migrate --stage dev",
+    "start": "sls offline --httpPort 3002 --lambdaPort 3003",
     "deploy": "serverless deploy",
     "undeploy": "serverless remove"
   },
