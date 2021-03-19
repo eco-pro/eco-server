@@ -6,6 +6,8 @@
     "start": "serverless offline",
     "devdb": "sls dynamodb start --migrate --stage dev"
   },
-  "dependencies": {},
+  "dependencies": {
+    "serverless-dynamodb-local": "^0.2.39"
+  },
   "devDependencies": {}
 }
