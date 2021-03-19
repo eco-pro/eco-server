@@ -3,6 +3,7 @@ import requests as req
 import re
 import zipfile
 import json
+from json.decoder import JSONDecodeError
 import hashlib
 import os
 import subprocess
@@ -220,10 +221,6 @@ def compile_elm(author,
             capture_output=True,
             cwd=workingDir)
         errorString = elmReportResult.stderr.decode('utf-8')
-        try:
-            errorJson = json.loads(errorString, strict=False)
-        except JSONDecodeError:
-            errorJson = {"error": "Error decoding JSON report."}
 
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
@@ -231,6 +228,11 @@ def compile_elm(author,
         upload_file(json_report_file_name, log_bucket_name,
                     object_name=json_report_file_name)
         # os.remove(json_report_file_name)
+
+        try:
+            errorJson = json.loads(errorString, strict=False)
+        except JSONDecodeError:
+            errorJson = {"error": "Error decoding JSON report."}
 
         keysToKeep = ['path', 'type', 'title']
         errorJson = {key: errorJson[key]
