@@ -10,5 +10,7 @@
   "dependencies": {
     "@the-sett/serverless-elm-bridge": "^4.0.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "serverless-localstack": "^0.4.29"
+  }
 }
