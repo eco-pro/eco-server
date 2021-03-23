@@ -1,9 +1,10 @@
-To get serverless-dynamodb-local working you first need to install it:
+### Install localstack
 
-    > npx sls dynamodb install
+https://github.com/localstack/localstack is needed to run the test stack
+offline. Instructions on installation are available on its GitHub README.
 
-It requires a Java package to run, so you also need Java installed on your system. Check the output of:
+To start it running and deploy the test database run:
 
-    > java --version
+    > npx sls deploy --stage local
 
-And install Java if this does not work.
+The first time this is run, you should see some logs confirming that its docker image is being started.
