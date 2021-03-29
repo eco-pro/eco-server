@@ -507,7 +507,7 @@ type alias QueryResponse a =
     BatchGetResponse a
 
 
-type Attribute
+type AttributeValue
     = StringAttr String
     | NumberAttr Int
 
@@ -517,12 +517,12 @@ type KeyExpression
 
 
 type KeyCondition
-    = Equals String Attribute
-    | LessThan String Attribute
-    | LessThenOrEqual String Attribute
-    | GreaterThan String Attribute
-    | GreaterThanOrEqual String Attribute
-    | Between String Attribute Attribute
+    = Equals String AttributeValue
+    | LessThan String AttributeValue
+    | LessThenOrEqual String AttributeValue
+    | GreaterThan String AttributeValue
+    | GreaterThanOrEqual String AttributeValue
+    | Between String AttributeValue AttributeValue
 
 
 type Order
@@ -532,7 +532,7 @@ type Order
 
 type alias Query =
     { partitionKeyName : String
-    , partitionKeyValue : Attribute
+    , partitionKeyValue : AttributeValue
     , rangeKeyCondition : Maybe KeyCondition
     , order : Order
     , limit : Maybe Int
@@ -598,17 +598,17 @@ keyConditionAsStringAndAttrs keyConditions =
         |> Tuple.mapSecond List.concat
 
 
-int : Int -> Attribute
+int : Int -> AttributeValue
 int val =
     NumberAttr val
 
 
-string : String -> Attribute
+string : String -> AttributeValue
 string val =
     StringAttr val
 
 
-encodeAttr : Attribute -> Value
+encodeAttr : AttributeValue -> Value
 encodeAttr attr =
     case attr of
         StringAttr val ->
@@ -628,32 +628,32 @@ partitionKeyEquals key val =
     }
 
 
-rangeKeyEquals : String -> Attribute -> Query -> Query
+rangeKeyEquals : String -> AttributeValue -> Query -> Query
 rangeKeyEquals keyName attr q =
     { q | rangeKeyCondition = Equals keyName attr |> Just }
 
 
-rangeKeyLessThan : String -> Attribute -> Query -> Query
+rangeKeyLessThan : String -> AttributeValue -> Query -> Query
 rangeKeyLessThan keyName attr q =
     { q | rangeKeyCondition = LessThan keyName attr |> Just }
 
 
-rangeKeyLessThanOrEqual : String -> Attribute -> Query -> Query
+rangeKeyLessThanOrEqual : String -> AttributeValue -> Query -> Query
 rangeKeyLessThanOrEqual keyName attr q =
     { q | rangeKeyCondition = LessThenOrEqual keyName attr |> Just }
 
 
-rangeKeyGreaterThan : String -> Attribute -> Query -> Query
+rangeKeyGreaterThan : String -> AttributeValue -> Query -> Query
 rangeKeyGreaterThan keyName attr q =
     { q | rangeKeyCondition = GreaterThan keyName attr |> Just }
 
 
-rangeKeyGreaterThanOrEqual : String -> Attribute -> Query -> Query
+rangeKeyGreaterThanOrEqual : String -> AttributeValue -> Query -> Query
 rangeKeyGreaterThanOrEqual keyName attr q =
     { q | rangeKeyCondition = GreaterThanOrEqual keyName attr |> Just }
 
 
-rangeKeyBetween : String -> Attribute -> Attribute -> Query -> Query
+rangeKeyBetween : String -> AttributeValue -> AttributeValue -> Query -> Query
 rangeKeyBetween keyName lowAttr highAttr q =
     { q | rangeKeyCondition = Between keyName lowAttr highAttr |> Just }
 
