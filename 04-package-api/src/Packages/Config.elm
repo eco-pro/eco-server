@@ -18,6 +18,7 @@ configDecoder =
         |> decodeAndMap (Decode.field "buildStatusByFQPackageIndex" Decode.string)
         |> decodeAndMap (Decode.field "markersTable" Decode.string)
         |> decodeAndMap (Decode.field "rootSiteImportsTable" Decode.string)
+        |> Decode.map (Debug.log "config")
 
 
 decodeAndMap : Decoder a -> Decoder (a -> b) -> Decoder b

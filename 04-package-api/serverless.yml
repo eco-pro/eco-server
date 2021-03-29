@@ -13,10 +13,14 @@ provider:
   timeout: 120
   environment:
     stage: ${self:custom.stage}
-    buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
-    buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
-    markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
-    rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
+    # buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    # buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
+    # markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
+    # rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
+    buildStatusTable: "BuildStatusTable"
+    buildStatusByFQPackageIndex: "BuildStatusByFQPackageIndex"
+    markersTable: "MarkersTableName"
+    rootSiteImportsTable: "RootSiteImportsTableName"
   iamRoleStatements:
     - Effect: Allow
       Action:
