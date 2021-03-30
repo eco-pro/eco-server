@@ -46,7 +46,7 @@ provider:
     # markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     # rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
     buildStatusTable: ${self:custom.stage}-buildstatus
-    buildStatusByFQPackageIndex: ${self:custom.stage}--buildstatus-byfqpackage
+    buildStatusByFQPackageIndex: ${self:custom.stage}-buildstatus-byfqpackage
     markersTable: ${self:custom.stage}-markers
     rootSiteImportsTable: ${self:custom.stage}-rootsiteimports
   iamRoleStatements:
