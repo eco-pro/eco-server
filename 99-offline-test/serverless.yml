@@ -1,0 +1,113 @@
+service: eco-server
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  profile: default
+  region: eu-west-2
+  environment:
+    DYNAMODB_NAMESPACE: ${opt:stage, "dev"}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/*"
+
+plugins:
+  - serverless-offline
+  - serverless-localstack
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  serverless-offline:
+    dontPrintOutput: true
+  localstack:
+    stages:
+      - local
+    host: http://localhost
+    edgePort: 4566
+    autostart: true
+    lambda:
+      mountCode: True
+    docker:
+      sudo: False
+  stages:
+    local:
+
+resources:
+  Resources:
+    ElmPackagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: elm-packages
+
+    ElmBuildLogsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: elm-build-logs
+
+    BuildStatusTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: label
+            AttributeType: S
+          - AttributeName: seq
+            AttributeType: N
+          - AttributeName: fqPackage
+            AttributeType: S
+        KeySchema:
+          - AttributeName: label
+            KeyType: HASH
+          - AttributeName: seq
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus-byfqpackage
+            KeySchema:
+              - AttributeName: fqPackage
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+    MarkersTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: source
+            AttributeType: S
+        KeySchema:
+          - AttributeName: source
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
+
+    RootSiteImportsTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: seq
+            AttributeType: N
+        KeySchema:
+          - AttributeName: seq
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-rootsiteimports
