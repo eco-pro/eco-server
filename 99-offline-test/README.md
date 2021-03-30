@@ -5,6 +5,14 @@ offline. Instructions on installation are available on its GitHub README.
 
 To start it running and deploy the test database run:
 
+    > docker run -it \
+      -p 4566:4566 \
+      -e SERVICES="dynamodb,s3" \
+      -e DEBUG=1 \
+      -e DATA_DIR="/tmp/localstack/data" \
+      -v ${HOME}/data/localstack:/tmp/localstack \
+      localstack/localstack
+
     > npx sls deploy --stage local
 
-The first time this is run, you should see some logs confirming that its docker image is being started.
+The dynamodb web shell should be available at: http://localhost:4566/shell/
