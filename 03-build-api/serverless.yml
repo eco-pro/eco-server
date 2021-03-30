@@ -8,6 +8,9 @@ plugins:
 custom:
   stage: ${opt:stage, "dev"}
   sstApp: ${self:custom.stage}-eco-server
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
   cloudmap:
     services:
       - cfname: 'BuildApiService' # Cloudformation friendly name

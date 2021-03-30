@@ -3,6 +3,9 @@ service: package-api
 custom:
   stage: ${opt:stage, "dev"}
   sstApp: ${self:custom.stage}-eco-server
+  serverless-offline:
+    httpPort: 4000
+    lambdaPort: 4002
 
 provider:
   name: aws
@@ -16,10 +19,10 @@ provider:
     # buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
     # markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     # rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
-    buildStatusTable: ${self:custom.stage}-BuildStatusTable
-    buildStatusByFQPackageIndex: ${self:custom.stage}-BuildStatusByFQPackageIndex
-    markersTable: ${self:custom.stage}-MarkersTableName
-    rootSiteImportsTable: ${self:custom.stage}-RootSiteImportsTableName
+    buildStatusTable: ${self:custom.stage}-buildstatus
+    buildStatusByFQPackageIndex: ${self:custom.stage}--buildstatus-byfqpackage
+    markersTable: ${self:custom.stage}-markers
+    rootSiteImportsTable: ${self:custom.stage}-rootsiteimports
   iamRoleStatements:
     - Effect: Allow
       Action:
