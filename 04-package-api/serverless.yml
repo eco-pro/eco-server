@@ -15,14 +15,10 @@ provider:
   timeout: 120
   environment:
     stage: ${self:custom.stage}
-    # buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
-    # buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
-    # markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
-    # rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
-    buildStatusTable: ${self:custom.stage}-buildstatus
-    buildStatusByFQPackageIndex: ${self:custom.stage}-buildstatus-byfqpackage
-    markersTable: ${self:custom.stage}-markers
-    rootSiteImportsTable: ${self:custom.stage}-rootsiteimports
+    buildStatusTable: !ImportValue ${self:custom.sstApp}-BuildStatusTableName
+    buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
+    markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
+    rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -38,6 +34,7 @@ provider:
 plugins:
   - serverless-webpack
   - serverless-offline
+  - serverless-dotenv-plugin
 
 functions:
   packages:
