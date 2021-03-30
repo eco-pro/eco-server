@@ -28,7 +28,7 @@ custom:
     dontPrintOutput: true
   localstack:
     stages:
-      - local
+      - dev
     host: http://localhost
     edgePort: 4566
     autostart: true
@@ -36,8 +36,6 @@ custom:
       mountCode: True
     docker:
       sudo: False
-  stages:
-    local:
 
 resources:
   Resources:
@@ -70,9 +68,9 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-buildstatus
         GlobalSecondaryIndexes:
-          - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-buildstatus-byfqpackage
+          - IndexName: ${self:provider.environment.DYNAMODB_NAMESPACE}-buildstatus-byfqpackage
             KeySchema:
               - AttributeName: fqPackage
                 KeyType: HASH
@@ -95,7 +93,7 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-markers
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-markers
 
     RootSiteImportsTable:
       Type: 'AWS::DynamoDB::Table'
@@ -110,4 +108,4 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-eco-rootsiteimports
+        TableName: ${self:provider.environment.DYNAMODB_NAMESPACE}-rootsiteimports

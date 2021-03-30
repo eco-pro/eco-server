@@ -1,7 +1,7 @@
 service: package-api
 
 custom:
-  stage: ${opt:stage, self:provider.stage}
+  stage: ${opt:stage, "dev"}
   sstApp: ${self:custom.stage}-eco-server
 
 provider:
@@ -9,7 +9,6 @@ provider:
   runtime: nodejs12.x
   profile: default
   region: eu-west-2
-  stage: dev
   timeout: 120
   environment:
     stage: ${self:custom.stage}
@@ -17,10 +16,10 @@ provider:
     # buildStatusByFQPackageIndex: !ImportValue ${self:custom.sstApp}-BuildStatusByFQPackageIndex
     # markersTable: !ImportValue ${self:custom.sstApp}-MarkersTableName
     # rootSiteImportsTable: !ImportValue ${self:custom.sstApp}-RootSiteImportsTableName
-    buildStatusTable: "BuildStatusTable"
-    buildStatusByFQPackageIndex: "BuildStatusByFQPackageIndex"
-    markersTable: "MarkersTableName"
-    rootSiteImportsTable: "RootSiteImportsTableName"
+    buildStatusTable: ${self:custom.stage}-BuildStatusTable
+    buildStatusByFQPackageIndex: ${self:custom.stage}-BuildStatusByFQPackageIndex
+    markersTable: ${self:custom.stage}-MarkersTableName
+    rootSiteImportsTable: ${self:custom.stage}-RootSiteImportsTableName
   iamRoleStatements:
     - Effect: Allow
       Action:
