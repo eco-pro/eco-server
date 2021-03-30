@@ -23,7 +23,7 @@ plugins:
   - serverless-localstack
 
 custom:
-  stage: ${opt:stage, self:provider.stage}
+  stage: ${opt:stage, "dev"}
   serverless-offline:
     dontPrintOutput: true
   localstack:

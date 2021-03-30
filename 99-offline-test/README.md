@@ -13,6 +13,6 @@ To start it running and deploy the test database run:
       -v ${HOME}/data/localstack:/tmp/localstack \
       localstack/localstack
 
-    > npx sls deploy --stage local
+    > npx sls deploy
 
 The dynamodb web shell should be available at: http://localhost:4566/shell/
