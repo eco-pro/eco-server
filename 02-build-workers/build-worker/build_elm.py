@@ -13,22 +13,40 @@ import sys
 import time
 import logging
 import boto3
+import pprint
 from dotenv import load_dotenv, find_dotenv
 from botocore.exceptions import ClientError
+
+print("====== Eco-Server Elm Package Build Script ======")
 
 load_dotenv(find_dotenv())
 
 config = {
+    'OFFLINE_MODE': os.environ.get('OFFLINE_MODE'),
+    'AWS_ENDPOINT_URL': os.environ.get('AWS_ENDPOINT_URL'),
     'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'),
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
     'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
 }
 
-print(config)
+#print(pprint.pformat(config))
 
-session = boto3.session.Session()
-print(session.get_credentials().get_frozen_credentials())
+print("\n==== Configuration:\n")
+for item in config.items():
+    if item[1]:
+        print("    " + item[0] + " = " + item[1])
+
+if config['OFFLINE_MODE'] == 'true':
+    session = boto3.session.Session()
+    s3 = session.resource('s3', endpoint_url=config['AWS_ENDPOINT_URL'])
+    # print(session.client('s3', endpoint_url=config['AWS_ENDPOINT_URL']).list_buckets())
+else:
+    session = boto3.session.Session()
+    s3 = session.resource('s3')
+    # print(session.get_credentials().get_frozen_credentials())
+
+
 
 def calc_zip_file_sha1(zip_file_name):
     """
@@ -92,7 +110,7 @@ def report_error(seq, reason):
                          json={"errorReason": reason})
 
     if errorResp.status_code == 500:
-        print("== Error: Server error whilst reporting error.")
+        print("* Error: Server error whilst reporting error.")
         print(errorResp.text)
         quit()
 
@@ -112,7 +130,7 @@ def report_compile_error(seq, version, errors, compileLogUrl, jsonReportUrl, zip
                                "sha1PackageContents": content_hash})
 
     if errorResp.status_code == 500:
-        print("== Error: Server error whilst reporting compile error.")
+        print("* Error: Server error whilst reporting compile error.")
         print(errorResp.text)
         quit()
 
@@ -182,8 +200,8 @@ def compile_elm(author,
     json_report_file_name = timestr + "_" + author + "_" + \
         packageName + "_" + version + "_compile_0.19.1.json"
 
-    print("log_bucket_name = " + log_bucket_name)
-    print("log_file_name = " + log_file_name)
+    # print("log_bucket_name = " + log_bucket_name)
+    # print("log_file_name = " + log_file_name)
 
     # Compile with human readable output logged.
     try:
@@ -192,13 +210,13 @@ def compile_elm(author,
                                    stderr=subprocess.STDOUT,
                                    cwd=workingDir)
     except IOError:
-        print("== Fatal Error: Cannot run compiler command " + compiler)
+        print("** Fatal Error: Cannot run compiler command " + compiler)
         quit()
 
     with open(log_file_name, "w") as compile_log:
         compile_log.write(elmResult.stdout.decode('utf-8'))
 
-    print("Copying build log onto S3.")
+    print("  Copying build log onto S3.")
     upload_file(log_file_name, log_bucket_name, object_name=log_file_name)
     # os.remove(log_file_name)
 
@@ -206,7 +224,7 @@ def compile_elm(author,
     # The JSON report is trimmed to a summary only, the compile log should
     # be consulted for the full details.
     if elmResult.returncode != 0:
-        print("== Error: Compiled failed.")
+        print("* Error: Compiled failed.")
 
         elmReportResult = subprocess.run(
             [compiler, "make", "--report=json"],
@@ -216,7 +234,7 @@ def compile_elm(author,
 
         with open(json_report_file_name, "w") as json_report:
             json_report.write(errorString)
-        print("Copying build report json onto S3.")
+        print("  Copying build report json onto S3.")
         upload_file(json_report_file_name, log_bucket_name,
                     object_name=json_report_file_name)
         # os.remove(json_report_file_name)
@@ -233,13 +251,15 @@ def compile_elm(author,
         report_compile_error(seq=seq,
                              version="0.19.1",
                              errors=errorJson,
-                             compileLogUrl='https://' + log_bucket_name + '.s3.amazonaws.com/' + log_file_name,
-                             jsonReportUrl='https://' + log_bucket_name + '.s3.amazonaws.com/' + json_report_file_name,
+                             compileLogUrl='https://' + log_bucket_name +
+                             '.s3.amazonaws.com/' + log_file_name,
+                             jsonReportUrl='https://' + log_bucket_name +
+                             '.s3.amazonaws.com/' + json_report_file_name,
                              zip_hash=zip_hash,
                              content_hash=content_hash)
         return False
 
-    print("Compiled Ok.")
+    print("  Compiled Ok.")
     shutil.rmtree(workingDir + "/elm-stuff")
     os.remove(workingDir + "/docs.json")
 
@@ -260,8 +280,6 @@ def upload_file(file_name, bucket, object_name=None):
         object_name = file_name
 
     # Upload the file
-    s3 = session.resource('s3')
-
     try:
         s3.Object(bucket, object_name).put(Body=open(file_name, 'rb'))
     except ClientError as e:
@@ -270,7 +288,7 @@ def upload_file(file_name, bucket, object_name=None):
     return True
 
 
-print("====== Eco-Server Elm Package Build Script ======")
+
 
 start_dir = os.getcwd()
 
@@ -279,9 +297,13 @@ while True:
     os.chdir(start_dir)
 
     # Check on the package server what job to do next, if any.
-    print("\n==== What job?")
+    print("\n==== What job?\n")
 
-    resp = req.get(config['PACKAGE_API_ROOT'] + "root-site/packages/nextjob")
+    try:
+        resp = req.get(config['PACKAGE_API_ROOT'] + "root-site/packages/nextjob")
+    except:
+        print("Could not connect to the Package API.")
+        quit()
 
     if resp.status_code != 200:
         print("No jobs. All done.")
@@ -295,20 +317,20 @@ while True:
     version = job['version']
 
     # Download the package .zip from GitHub, and unpack it.
-    print("Downloading from GitHub...")
-    print(zipUrl)
+    print("1. Downloading from GitHub...")
+    print("  " + zipUrl)
 
     resp = req.get(zipUrl, allow_redirects=True)
     filename = getFilename_fromCd(resp.headers.get('content-disposition'))
 
     if resp.status_code != 200:
-        print("== Error: No zip file found.")
+        print("* Error: No zip file found.")
         report_error(seq, "no-github-package")
         continue
 
     open(filename, 'wb').write(resp.content)
 
-    print("Got " + filename + ", unpacking...")
+    print("2. Got " + filename + ", unpacking...")
 
     with zipfile.ZipFile(filename, "r") as zip_ref:
         zipnames = zip_ref.namelist()
@@ -319,7 +341,7 @@ while True:
     os.remove(filename)
 
     # Build a .zip of the minimized package.
-    print("Building the canonical Elm package as a .zip file.")
+    print("3. Building the canonical Elm package as a .zip file.")
 
     try:
         shutil.make_archive(base_name=packageName + "-" + version,
@@ -327,7 +349,7 @@ while True:
                             root_dir=author,
                             base_dir=packageName + "-" + version)
     except FileNotFoundError:
-        print("== Error: Package renamed.")
+        print("* Error: Package renamed.")
         report_error(seq, "package-renamed")
         continue
 
@@ -335,7 +357,7 @@ while True:
     zip_hash, content_hash = calc_zip_file_sha1(archive_name)
 
     # Extract the elm.json, and POST it to the package server.
-    print("Is it an Elm 19 project? Skip if not.")
+    print("  Is it an Elm 19 project? Skip if not.")
 
     workingDir = author + "/" + packageName + "-" + version
 
@@ -346,7 +368,7 @@ while True:
             elmCompilerVersion = data['elm-version']
 
             if elmCompilerVersion.startswith('0.19.0'):
-                print("Compile with Elm 0.19.0")
+                print("  Compile with Elm 0.19.0")
                 if compile_elm(author, packageName, version,
                                zip_hash, content_hash,
                                workingDir,
@@ -354,7 +376,7 @@ while True:
                     continue
 
             elif elmCompilerVersion.startswith('0.19.1'):
-                print("Compile with Elm 0.19.1")
+                print("  Compile with Elm 0.19.1")
                 if compile_elm(author, packageName, version,
                                zip_hash, content_hash,
                                workingDir,
@@ -362,26 +384,25 @@ while True:
                     continue
 
             else:
-                print("== Error: Unsupported Elm version.")
+                print("* Error: Unsupported Elm version.")
                 report_error(seq, "unsupported-elm-version")
                 continue
 
-                print("Found valid elm.json, posting to package server...")
-
     except IOError:
-        print("== Error: No " + packageName + "-" + version + "/" + "elm.json")
+        print("* Error: No " + packageName + "-" + version + "/" + "elm.json")
         report_error(seq, "not-elm-package")
         continue
 
     # Copy the package .zip onto its S3 location.
 
-    print("Copying the package onto S3...")
-    upload_file(archive_name, config['PACKAGE_BUCKET_NAME'], object_name=archive_name)
+    print("4. Copying the package onto S3...")
+    upload_file(
+        archive_name, config['PACKAGE_BUCKET_NAME'], object_name=archive_name)
     os.remove(archive_name)
 
     # POST to the package server to tell it the job is complete.
 
-    print("Letting the package server know where to find it...")
+    print("5. Letting the package server know where to find it...")
     package_bucket_name = config['PACKAGE_BUCKET_NAME']
     req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/ready",
              json={"elmJson": data,
@@ -389,8 +410,6 @@ while True:
                    "sha1ZipArchive": zip_hash,
                    "sha1PackageContents": content_hash})
 
-
-
-    print("Job done. Try looking for the next job...")
+    print("\n...Job done. Try looking for the next job...")
 
     shutil.rmtree(workingDir)
