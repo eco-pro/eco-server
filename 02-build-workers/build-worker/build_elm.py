@@ -30,7 +30,7 @@ config = {
     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
 }
 
-#print(pprint.pformat(config))
+# print(pprint.pformat(config))
 
 print("\n==== Configuration:\n")
 for item in config.items():
@@ -45,7 +45,6 @@ else:
     session = boto3.session.Session()
     s3 = session.resource('s3')
     # print(session.get_credentials().get_frozen_credentials())
-
 
 
 def calc_zip_file_sha1(zip_file_name):
@@ -288,128 +287,132 @@ def upload_file(file_name, bucket, object_name=None):
     return True
 
 
-
-
 start_dir = os.getcwd()
 
-while True:
-    # time.sleep(1)
-    os.chdir(start_dir)
+try:
+    while True:
+        # time.sleep(1)
+        os.chdir(start_dir)
 
-    # Check on the package server what job to do next, if any.
-    print("\n==== What job?\n")
+        # Check on the package server what job to do next, if any.
+        print("\n==== What job?\n")
 
-    try:
-        resp = req.get(config['PACKAGE_API_ROOT'] + "root-site/packages/nextjob")
-    except:
-        print("Could not connect to the Package API.")
-        quit()
+        try:
+            resp = req.get(config['PACKAGE_API_ROOT'] +
+                           "root-site/packages/nextjob")
+        except:
+            print("Could not connect to the Build API.")
+            quit()
 
-    if resp.status_code != 200:
-        print("No jobs. All done.")
-        quit()
+        if resp.status_code != 200:
+            print("No jobs. All done.")
+            quit()
 
-    job = resp.json()
-    seq = job['seq']
-    zipUrl = job['zipUrl']
-    packageName = job['name']
-    author = job['author']
-    version = job['version']
+        job = resp.json()
+        seq = job['seq']
+        zipUrl = job['zipUrl']
+        packageName = job['name']
+        author = job['author']
+        version = job['version']
 
-    # Download the package .zip from GitHub, and unpack it.
-    print("1. Downloading from GitHub...")
-    print("  " + zipUrl)
+        # Download the package .zip from GitHub, and unpack it.
+        print("1. Downloading from GitHub...")
+        print("  " + zipUrl)
 
-    resp = req.get(zipUrl, allow_redirects=True)
-    filename = getFilename_fromCd(resp.headers.get('content-disposition'))
+        resp = req.get(zipUrl, allow_redirects=True)
+        filename = getFilename_fromCd(resp.headers.get('content-disposition'))
 
-    if resp.status_code != 200:
-        print("* Error: No zip file found.")
-        report_error(seq, "no-github-package")
-        continue
+        if resp.status_code != 200:
+            print("* Error: No zip file found.")
+            report_error(seq, "no-github-package")
+            continue
 
-    open(filename, 'wb').write(resp.content)
+        open(filename, 'wb').write(resp.content)
 
-    print("2. Got " + filename + ", unpacking...")
+        print("2. Got " + filename + ", unpacking...")
 
-    with zipfile.ZipFile(filename, "r") as zip_ref:
-        zipnames = zip_ref.namelist()
-        filterednames = [n for n in zipnames if is_elm_package_file(n)]
-        for zipname in filterednames:
-            zip_ref.extract(zipname, path=author + "/")
+        with zipfile.ZipFile(filename, "r") as zip_ref:
+            zipnames = zip_ref.namelist()
+            filterednames = [n for n in zipnames if is_elm_package_file(n)]
+            for zipname in filterednames:
+                zip_ref.extract(zipname, path=author + "/")
 
-    os.remove(filename)
+        os.remove(filename)
 
-    # Build a .zip of the minimized package.
-    print("3. Building the canonical Elm package as a .zip file.")
+        # Build a .zip of the minimized package.
+        print("3. Building the canonical Elm package as a .zip file.")
 
-    try:
-        shutil.make_archive(base_name=packageName + "-" + version,
-                            format='zip',
-                            root_dir=author,
-                            base_dir=packageName + "-" + version)
-    except FileNotFoundError:
-        print("* Error: Package renamed.")
-        report_error(seq, "package-renamed")
-        continue
+        try:
+            shutil.make_archive(base_name=packageName + "-" + version,
+                                format='zip',
+                                root_dir=author,
+                                base_dir=packageName + "-" + version)
+        except FileNotFoundError:
+            print("* Error: Package renamed.")
+            report_error(seq, "package-renamed")
+            continue
 
-    archive_name = packageName + "-" + version + ".zip"
-    zip_hash, content_hash = calc_zip_file_sha1(archive_name)
+        archive_name = packageName + "-" + version + ".zip"
+        zip_hash, content_hash = calc_zip_file_sha1(archive_name)
 
-    # Extract the elm.json, and POST it to the package server.
-    print("  Is it an Elm 19 project? Skip if not.")
+        # Extract the elm.json, and POST it to the package server.
+        print("  Is it an Elm 19 project? Skip if not.")
 
-    workingDir = author + "/" + packageName + "-" + version
+        workingDir = author + "/" + packageName + "-" + version
 
-    try:
-        with open(workingDir + "/elm.json") as json_file:
-            data = json.load(json_file)
+        try:
+            with open(workingDir + "/elm.json") as json_file:
+                data = json.load(json_file)
 
-            elmCompilerVersion = data['elm-version']
+                elmCompilerVersion = data['elm-version']
 
-            if elmCompilerVersion.startswith('0.19.0'):
-                print("  Compile with Elm 0.19.0")
-                if compile_elm(author, packageName, version,
-                               zip_hash, content_hash,
-                               workingDir,
-                               compiler="elm19") == False:
+                if elmCompilerVersion.startswith('0.19.0'):
+                    print("  Compile with Elm 0.19.0")
+                    if compile_elm(author, packageName, version,
+                                   zip_hash, content_hash,
+                                   workingDir,
+                                   compiler="elm19") == False:
+                        continue
+
+                elif elmCompilerVersion.startswith('0.19.1'):
+                    print("  Compile with Elm 0.19.1")
+                    if compile_elm(author, packageName, version,
+                                   zip_hash, content_hash,
+                                   workingDir,
+                                   compiler="elm") == False:
+                        continue
+
+                else:
+                    print("* Error: Unsupported Elm version.")
+                    report_error(seq, "unsupported-elm-version")
                     continue
 
-            elif elmCompilerVersion.startswith('0.19.1'):
-                print("  Compile with Elm 0.19.1")
-                if compile_elm(author, packageName, version,
-                               zip_hash, content_hash,
-                               workingDir,
-                               compiler="elm") == False:
-                    continue
+        except IOError:
+            print("* Error: No " + packageName +
+                  "-" + version + "/" + "elm.json")
+            report_error(seq, "not-elm-package")
+            continue
 
-            else:
-                print("* Error: Unsupported Elm version.")
-                report_error(seq, "unsupported-elm-version")
-                continue
+        # Copy the package .zip onto its S3 location.
 
-    except IOError:
-        print("* Error: No " + packageName + "-" + version + "/" + "elm.json")
-        report_error(seq, "not-elm-package")
-        continue
+        print("4. Copying the package onto S3...")
+        upload_file(
+            archive_name, config['PACKAGE_BUCKET_NAME'], object_name=archive_name)
+        os.remove(archive_name)
 
-    # Copy the package .zip onto its S3 location.
+        # POST to the package server to tell it the job is complete.
 
-    print("4. Copying the package onto S3...")
-    upload_file(
-        archive_name, config['PACKAGE_BUCKET_NAME'], object_name=archive_name)
-    os.remove(archive_name)
+        print("5. Letting the package server know where to find it...")
+        package_bucket_name = config['PACKAGE_BUCKET_NAME']
+        req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/ready",
+                 json={"elmJson": data,
+                       "url": 'https://' + package_bucket_name + '.s3.amazonaws.com/' + archive_name,
+                       "sha1ZipArchive": zip_hash,
+                       "sha1PackageContents": content_hash})
 
-    # POST to the package server to tell it the job is complete.
+        print("\n...Job done. Try looking for the next job.")
 
-    print("5. Letting the package server know where to find it...")
-    package_bucket_name = config['PACKAGE_BUCKET_NAME']
-    req.post(config['PACKAGE_API_ROOT'] + "root-site/packages/" + str(seq) + "/ready",
-             json={"elmJson": data,
-                   "url": 'https://' + package_bucket_name + '.s3.amazonaws.com/' + archive_name,
-                   "sha1ZipArchive": zip_hash,
-                   "sha1PackageContents": content_hash})
-
-    print("\n...Job done. Try looking for the next job...")
-
-    shutil.rmtree(workingDir)
+        shutil.rmtree(workingDir)
+except KeyboardInterrupt:
+    print("\nInterrupted with CTRL+C.")
+    quit()
