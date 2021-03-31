@@ -3,11 +3,15 @@ service: build-api
 plugins:
   - serverless-webpack
   - serverless-offline
+  - serverless-dotenv-plugin
   - ./serverless-cloudmap
 
 custom:
-  stage: ${opt:stage, self:provider.stage}
+  stage: ${opt:stage, "dev"}
   sstApp: ${self:custom.stage}-eco-server
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
   cloudmap:
     services:
       - cfname: 'BuildApiService' # Cloudformation friendly name
@@ -25,7 +29,6 @@ provider:
   runtime: nodejs12.x
   profile: default
   region: eu-west-2
-  stage: dev
   timeout: 120
   # vpcEndpointIds:
   #   - !ImportValue ${self:custom.sstApp}-VpcEndpointId

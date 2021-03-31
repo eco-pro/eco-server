@@ -1,0 +1,13 @@
+{
+  "name": "eco-server-offline-test",
+  "version": "1.0.0",
+  "description": "Offline Testing Stack",
+  "scripts": {
+    "start": "serverless offline",
+    "devdb": "sls dynamodb start --migrate --stage dev"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serverless-localstack": "^0.4.29"
+  }
+}

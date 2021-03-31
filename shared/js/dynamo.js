@@ -4,9 +4,10 @@ const AWS = require('aws-sdk');
 // In serverless offline mode, this will use a local server.
 
 if (process.env.IS_OFFLINE) {
+  console.log("IS_OFFLINE");
   AWS.config.update({
     region: 'localhost',
-    endpoint: "http://localhost:8000"
+    endpoint: "http://localhost:4566"
   });
 }
 
