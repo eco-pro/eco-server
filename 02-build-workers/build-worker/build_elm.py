@@ -223,7 +223,7 @@ def compile_elm(author,
     # The JSON report is trimmed to a summary only, the compile log should
     # be consulted for the full details.
     if elmResult.returncode != 0:
-        print("* Error: Compiled failed.")
+        print("* Error: Compile failed.")
 
         elmReportResult = subprocess.run(
             [compiler, "make", "--report=json"],
