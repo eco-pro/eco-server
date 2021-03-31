@@ -315,6 +315,8 @@ try:
         author = job['author']
         version = job['version']
 
+        print("Job {}\n".format(seq))
+
         # Download the package .zip from GitHub, and unpack it.
         print("1. Downloading from GitHub...")
         print("  " + zipUrl)
