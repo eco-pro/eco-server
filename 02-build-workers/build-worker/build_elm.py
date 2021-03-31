@@ -13,14 +13,13 @@ import sys
 import time
 import logging
 import boto3
+from dotenv import load_dotenv, find_dotenv
 from botocore.exceptions import ClientError
 
+load_dotenv(find_dotenv())
+
 config = {
-    # 'AWS_ACCESS_KEY_ID': os.environ.get('AWS_ACCESS_KEY_ID'),
-    # 'AWS_SECRET_ACCESS_KEY': os.environ.get('AWS_SECRET_ACCESS_KEY'),
     'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'),
-    'DISCOVERY_NAMESPACE': 'mydomain.com',
-    'BUILD_API_SERVICE': 'build-api-service',
     'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT'),
     'PACKAGE_BUCKET_NAME': os.environ.get('PACKAGE_BUCKET_NAME'),
     'BUILD_LOGS_BUCKET_NAME': os.environ.get('BUILD_LOGS_BUCKET_NAME')
@@ -272,24 +271,6 @@ def upload_file(file_name, bucket, object_name=None):
 
 
 print("====== Eco-Server Elm Package Build Script ======")
-
-# Find the build API service.
-print("\n=== Looking for the build API service.")
-discovery_namespace = config['DISCOVERY_NAMESPACE']
-build_api_service = config['BUILD_API_SERVICE']
-
-sdclient = session.client('servicediscovery')
-discovery_response = sdclient.discover_instances(
-    NamespaceName=discovery_namespace,
-    ServiceName=build_api_service
-    )
-
-if not discovery_response['Instances']:
-    print("Failed to discover the build API service.")
-    quit()
-
-config['PACKAGE_API_ROOT'] = discovery_response['Instances'][0]['Attributes']['url']
-print("Got build API root URL: " + config['PACKAGE_API_ROOT'])
 
 start_dir = os.getcwd()
 
