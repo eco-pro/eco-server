@@ -85,6 +85,7 @@ port dynamoQueryPort : InteropRequestPort Value msg
 
 type Msg msg
     = BatchPutLoop PutResponse String (Msg msg -> msg) (PutResponse -> msg) (List Value)
+    | QueryLoop -- QueryResponse a
 
 
 update : Msg msg -> Conn config model route msg -> ( Conn config model route msg, Cmd msg )
@@ -112,6 +113,9 @@ update msg conn =
 
                 PutError dbErrorMsg ->
                     ( conn, PutError dbErrorMsg |> responseFn |> Task.Extra.message )
+
+        QueryLoop ->
+            ( conn, Cmd.none )
 
 
 
