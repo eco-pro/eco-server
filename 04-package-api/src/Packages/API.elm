@@ -153,23 +153,23 @@ router conn =
 decodeStatusRecord : Dynamo.QueryResponse Value -> Dynamo.QueryResponse StatusTable.Record
 decodeStatusRecord queryResponse =
     case queryResponse of
-        Dynamo.BatchGetItems items ->
+        Dynamo.QueryItems maybeMore items ->
             let
                 decodedItems =
                     items
                         |> List.map (Decode.decodeValue StatusTable.decoder)
                         |> RE.combine
-                        |> Result.mapError (Decode.errorToString >> Dynamo.BatchGetError)
+                        |> Result.mapError (Decode.errorToString >> Dynamo.QueryError)
             in
             case decodedItems of
                 Ok vals ->
-                    Dynamo.BatchGetItems vals
+                    Dynamo.QueryItems maybeMore vals
 
                 Err err ->
                     err
 
-        Dynamo.BatchGetError err ->
-            Dynamo.BatchGetError err
+        Dynamo.QueryError err ->
+            Dynamo.QueryError err
 
 
 type Msg
@@ -230,7 +230,7 @@ update msg conn =
 
         BuildStatusForElmJson result ->
             case result of
-                Dynamo.BatchGetItems (status :: _) ->
+                Dynamo.QueryItems _ (status :: _) ->
                     StatusTable.getElmJson status
                         |> Maybe.map
                             (\project ->
@@ -242,15 +242,15 @@ update msg conn =
                             )
                         |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Dynamo.BatchGetItems [] ->
+                Dynamo.QueryItems _ [] ->
                     respond ( 404, Body.empty ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         BuildStatusForEndpoint result ->
             case result of
-                Dynamo.BatchGetItems (status :: _) ->
+                Dynamo.QueryItems _ (status :: _) ->
                     StatusTable.getArchive status
                         |> Maybe.map
                             (\archive ->
@@ -267,39 +267,39 @@ update msg conn =
                             )
                         |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Dynamo.BatchGetItems [] ->
+                Dynamo.QueryItems _ [] ->
                     respond ( 404, Body.empty ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         ReadyPackagesSinceLoaded since loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.QueryItems _ records ->
                     StatusQueries.getPackagesSince since
                         StatusTable.LabelError
                         (decodeStatusRecord >> PackagesSinceLoaded records)
                         DynamoMsg
                         conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         ReadyPackagesLoaded loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.QueryItems _ records ->
                     StatusQueries.getPackagesSince 0
                         StatusTable.LabelError
                         (decodeStatusRecord >> AllPackagesLoaded records)
                         DynamoMsg
                         conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         PackagesSinceLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems errorRecords ->
+                Dynamo.QueryItems _ errorRecords ->
                     let
                         records =
                             List.append readyRecords errorRecords
@@ -323,12 +323,12 @@ update msg conn =
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         AllPackagesLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems errorRecords ->
+                Dynamo.QueryItems _ errorRecords ->
                     let
                         records =
                             List.append readyRecords errorRecords
@@ -370,7 +370,7 @@ update msg conn =
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
 
