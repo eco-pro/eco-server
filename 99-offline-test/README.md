@@ -10,6 +10,7 @@ To start it running and deploy the test database run:
       -e DEBUG=1 \
       -e DATA_DIR="/tmp/localstack/data" \
       -v ${HOME}/data/localstack:/tmp/localstack \
+      --name localstack_main \
       localstack/localstack
 
     > npx sls deploy
