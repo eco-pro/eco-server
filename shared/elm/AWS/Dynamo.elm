@@ -85,7 +85,7 @@ port dynamoQueryPort : InteropRequestPort Value msg
 
 type Msg msg
     = BatchPutLoop PutResponse String (Msg msg -> msg) (PutResponse -> msg) (List Value)
-    | QueryLoop -- QueryResponse a
+    | QueryLoop (Msg msg -> msg) (QueryResponse Value -> msg) (QueryResponse Value)
 
 
 update : Msg msg -> Conn config model route msg -> ( Conn config model route msg, Cmd msg )
@@ -114,8 +114,8 @@ update msg conn =
                 PutError dbErrorMsg ->
                     ( conn, PutError dbErrorMsg |> responseFn |> Task.Extra.message )
 
-        QueryLoop ->
-            ( conn, Cmd.none )
+        QueryLoop tagger responseFn results ->
+            ( conn, results |> responseFn |> Task.Extra.message )
 
 
 
@@ -675,15 +675,16 @@ limitResults limit q =
 query :
     String
     -> Query
-    -> Decoder a
-    -> (QueryResponse a -> msg)
+    -> (Msg msg -> msg)
+    -> (QueryResponse Value -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-query table q decoder responseFn conn =
+query table q tagger responseFn conn =
     Serverless.interop
         dynamoQueryPort
         (queryEncoder table Nothing q)
-        (queryResponseDecoder decoder >> responseFn)
+        --(queryResponseDecoder decoder >> responseFn)
+        (\val -> QueryLoop tagger responseFn (queryResponseDecoder Decode.value val) |> tagger)
         conn
 
 
@@ -726,7 +727,9 @@ queryEncoder table maybeIndex q =
 
         Reverse ->
             ( "ScanIndexForward", Encode.bool False ) |> Just
-    , Maybe.map (\limit -> ( "Limit", Encode.int limit )) q.limit
+
+    --, Maybe.map (\limit -> ( "Limit", Encode.int limit )) q.limit
+    , ( "Limit", Encode.int 50 ) |> Just
     ]
         |> Maybe.Extra.values
         |> Encode.object

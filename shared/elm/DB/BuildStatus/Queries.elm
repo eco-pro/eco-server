@@ -12,6 +12,7 @@ import DB.BuildStatus.ByFQPackageIndex as FQPackageIndex
 import DB.BuildStatus.Table as StatusTable
 import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Elm.Project
+import Json.Encode as Encode exposing (Value)
 import Serverless.Conn exposing (Conn)
 import Time exposing (Posix)
 import Url exposing (Url)
@@ -114,10 +115,11 @@ saveAll timestamp packages responseFn dynamoMsgFn conn =
 getPackagesSince :
     Int
     -> StatusTable.Label
-    -> (Dynamo.QueryResponse StatusTable.Record -> msg)
+    -> (Dynamo.QueryResponse Value -> msg)
+    -> (Dynamo.Msg msg -> msg)
     -> Conn (Config c) model route msg
     -> ( Conn (Config c) model route msg, Cmd msg )
-getPackagesSince seq label responseFn conn =
+getPackagesSince seq label responseFn dynamoMsgFn conn =
     let
         query =
             Dynamo.partitionKeyEquals "label" (StatusTable.labelToString label)
@@ -126,7 +128,7 @@ getPackagesSince seq label responseFn conn =
     Dynamo.query
         (ecoBuildStatusTableName conn)
         query
-        StatusTable.decoder
+        dynamoMsgFn
         responseFn
         conn
 
