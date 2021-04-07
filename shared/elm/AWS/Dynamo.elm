@@ -5,7 +5,7 @@ port module AWS.Dynamo exposing
     , batchGet, BatchGetResponse(..)
     , batchPut
     , updateKey
-    , Query, QueryResponse, Order(..), query, queryIndex, partitionKeyEquals, limitResults, orderResults
+    , Query, QueryResponse(..), Order(..), query, queryIndex, partitionKeyEquals, limitResults, orderResults
     , rangeKeyEquals, rangeKeyLessThan, rangeKeyLessThanOrEqual, rangeKeyGreaterThan
     , rangeKeyGreaterThanOrEqual, rangeKeyBetween
     , int, string
@@ -85,6 +85,7 @@ port dynamoQueryPort : InteropRequestPort Value msg
 
 type Msg msg
     = BatchPutLoop PutResponse String (Msg msg -> msg) (PutResponse -> msg) (List Value)
+    | QueryLoop (List Value) String Query (Msg msg -> msg) (QueryResponse Value -> msg) (QueryResponse Value)
 
 
 update : Msg msg -> Conn config model route msg -> ( Conn config model route msg, Cmd msg )
@@ -98,20 +99,30 @@ update msg conn =
                             ( conn, responseFn PutOk |> Task.Extra.message )
 
                         _ ->
-                            let
-                                ( nextConn, loopCmd ) =
-                                    batchPutInner table
-                                        tagger
-                                        responseFn
-                                        remainder
-                                        conn
-                            in
-                            ( nextConn
-                            , loopCmd
-                            )
+                            batchPutInner table
+                                tagger
+                                responseFn
+                                remainder
+                                conn
 
                 PutError dbErrorMsg ->
                     ( conn, PutError dbErrorMsg |> responseFn |> Task.Extra.message )
+
+        QueryLoop accum table q tagger responseFn results ->
+            case results of
+                QueryItems Nothing items ->
+                    ( conn, QueryItems Nothing (accum ++ items) |> responseFn |> Task.Extra.message )
+
+                QueryItems (Just lastEvaluatedKey) items ->
+                    queryInner (accum ++ items)
+                        table
+                        (nextPage lastEvaluatedKey q)
+                        tagger
+                        responseFn
+                        conn
+
+                QueryError dbErrorMsg ->
+                    ( conn, QueryError dbErrorMsg |> responseFn |> Task.Extra.message )
 
 
 
@@ -503,8 +514,9 @@ batchGetResponseDecoder tableName itemDecoder val =
 -- Queries
 
 
-type alias QueryResponse a =
-    BatchGetResponse a
+type QueryResponse a
+    = QueryItems (Maybe Value) (List a)
+    | QueryError String
 
 
 type AttributeValue
@@ -536,6 +548,7 @@ type alias Query =
     , rangeKeyCondition : Maybe KeyCondition
     , order : Order
     , limit : Maybe Int
+    , exclusiveStartKey : Maybe Value
     }
 
 
@@ -625,6 +638,7 @@ partitionKeyEquals key val =
     , rangeKeyCondition = Nothing
     , order = Forward
     , limit = Nothing
+    , exclusiveStartKey = Nothing
     }
 
 
@@ -668,18 +682,35 @@ limitResults limit q =
     { q | limit = Just limit }
 
 
+nextPage : Value -> Query -> Query
+nextPage lastEvalKey q =
+    { q | exclusiveStartKey = Just lastEvalKey }
+
+
 query :
     String
     -> Query
-    -> Decoder a
-    -> (QueryResponse a -> msg)
+    -> (Msg msg -> msg)
+    -> (QueryResponse Value -> msg)
     -> Conn config model route msg
     -> ( Conn config model route msg, Cmd msg )
-query table q decoder responseFn conn =
+query table q tagger responseFn conn =
+    queryInner [] table q tagger responseFn conn
+
+
+queryInner :
+    List Value
+    -> String
+    -> Query
+    -> (Msg msg -> msg)
+    -> (QueryResponse Value -> msg)
+    -> Conn config model route msg
+    -> ( Conn config model route msg, Cmd msg )
+queryInner accum table q tagger responseFn conn =
     Serverless.interop
         dynamoQueryPort
         (queryEncoder table Nothing q)
-        (queryResponseDecoder decoder >> responseFn)
+        (\val -> QueryLoop accum table q tagger responseFn (queryResponseDecoder Decode.value val) |> tagger)
         conn
 
 
@@ -723,12 +754,13 @@ queryEncoder table maybeIndex q =
         Reverse ->
             ( "ScanIndexForward", Encode.bool False ) |> Just
     , Maybe.map (\limit -> ( "Limit", Encode.int limit )) q.limit
+    , Maybe.map (\exclusiveStartKey -> ( "ExclusiveStartKey", exclusiveStartKey )) q.exclusiveStartKey
     ]
         |> Maybe.Extra.values
         |> Encode.object
 
 
-queryResponseDecoder : Decoder a -> Value -> BatchGetResponse a
+queryResponseDecoder : Decoder a -> Value -> QueryResponse a
 queryResponseDecoder itemDecoder val =
     let
         decoder =
@@ -736,15 +768,16 @@ queryResponseDecoder itemDecoder val =
                 |> Decode.andThen
                     (\type_ ->
                         case type_ of
-                            "Item" ->
-                                Decode.at [ "item", "Items" ] (Decode.list itemDecoder)
-                                    |> Decode.map BatchGetItems
+                            "Items" ->
+                                Decode.map2 QueryItems
+                                    (Decode.maybe (Decode.field "lastEvaluatedKey" Decode.value))
+                                    (Decode.field "items" (Decode.list itemDecoder))
 
                             _ ->
                                 Decode.field "errorMsg" Decode.string
-                                    |> Decode.map BatchGetError
+                                    |> Decode.map QueryError
                     )
     in
     Decode.decodeValue decoder val
-        |> Result.mapError (Decode.errorToString >> BatchGetError)
+        |> Result.mapError (Decode.errorToString >> QueryError)
         |> Result.Extra.merge

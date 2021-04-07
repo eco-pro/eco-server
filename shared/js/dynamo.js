@@ -132,14 +132,18 @@ let dynamoQuery = (responsePort, correlationId, interopId, params) => {
       };
     } else if (Object.entries(result).length === 0) {
       getResponse = {
-        type_: "Item",
-        item: []
+        type_: "Items",
+        items: []
       }
     } else {
       getResponse = {
-        type_: "Item",
-        item: result
+        type_: "Items",
+        items: result.Items
       }
+    }
+
+    if (result.LastEvaluatedKey !== undefined) {
+      getResponse.lastEvaluatedKey = result.LastEvaluatedKey;
     }
 
     responsePort.send([correlationId, interopId, getResponse]);

@@ -19,6 +19,7 @@ import Json.Encode as Encode exposing (Value)
 import Maybe.Extra
 import Packages.Config as Config exposing (Config)
 import Parser exposing (Parser)
+import Result.Extra as RE
 import Serverless
 import Serverless.Conn as Conn exposing (method, request, respond, route)
 import Serverless.Conn.Body as Body
@@ -106,25 +107,29 @@ router conn =
         ( POST, AllPackages ) ->
             StatusQueries.getPackagesSince 0
                 StatusTable.LabelReady
-                ReadyPackagesLoaded
+                (decodeStatusRecord >> ReadyPackagesLoaded)
+                DynamoMsg
                 conn
 
         ( GET, AllPackages ) ->
             StatusQueries.getPackagesSince 0
                 StatusTable.LabelReady
-                ReadyPackagesLoaded
+                (decodeStatusRecord >> ReadyPackagesLoaded)
+                DynamoMsg
                 conn
 
         ( POST, AllPackagesSince since ) ->
             StatusQueries.getPackagesSince since
                 StatusTable.LabelReady
-                (ReadyPackagesSinceLoaded since)
+                (decodeStatusRecord >> ReadyPackagesSinceLoaded since)
+                DynamoMsg
                 conn
 
         ( GET, AllPackagesSince since ) ->
             StatusQueries.getPackagesSince since
                 StatusTable.LabelReady
-                (ReadyPackagesSinceLoaded since)
+                (decodeStatusRecord >> ReadyPackagesSinceLoaded since)
+                DynamoMsg
                 conn
 
         ( GET, ElmJson author name version ) ->
@@ -143,6 +148,28 @@ router conn =
 
 
 -- Side effects.
+
+
+decodeStatusRecord : Dynamo.QueryResponse Value -> Dynamo.QueryResponse StatusTable.Record
+decodeStatusRecord queryResponse =
+    case queryResponse of
+        Dynamo.QueryItems maybeMore items ->
+            let
+                decodedItems =
+                    items
+                        |> List.map (Decode.decodeValue StatusTable.decoder)
+                        |> RE.combine
+                        |> Result.mapError (Decode.errorToString >> Dynamo.QueryError)
+            in
+            case decodedItems of
+                Ok vals ->
+                    Dynamo.QueryItems maybeMore vals
+
+                Err err ->
+                    err
+
+        Dynamo.QueryError err ->
+            Dynamo.QueryError err
 
 
 type Msg
@@ -203,7 +230,7 @@ update msg conn =
 
         BuildStatusForElmJson result ->
             case result of
-                Dynamo.BatchGetItems (status :: _) ->
+                Dynamo.QueryItems _ (status :: _) ->
                     StatusTable.getElmJson status
                         |> Maybe.map
                             (\project ->
@@ -215,15 +242,15 @@ update msg conn =
                             )
                         |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Dynamo.BatchGetItems [] ->
+                Dynamo.QueryItems _ [] ->
                     respond ( 404, Body.empty ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         BuildStatusForEndpoint result ->
             case result of
-                Dynamo.BatchGetItems (status :: _) ->
+                Dynamo.QueryItems _ (status :: _) ->
                     StatusTable.getArchive status
                         |> Maybe.map
                             (\archive ->
@@ -240,37 +267,39 @@ update msg conn =
                             )
                         |> Maybe.withDefault (respond ( 404, Body.empty ) conn)
 
-                Dynamo.BatchGetItems [] ->
+                Dynamo.QueryItems _ [] ->
                     respond ( 404, Body.empty ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         ReadyPackagesSinceLoaded since loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.QueryItems _ records ->
                     StatusQueries.getPackagesSince since
                         StatusTable.LabelError
-                        (PackagesSinceLoaded records)
+                        (decodeStatusRecord >> PackagesSinceLoaded records)
+                        DynamoMsg
                         conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         ReadyPackagesLoaded loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems records ->
+                Dynamo.QueryItems _ records ->
                     StatusQueries.getPackagesSince 0
                         StatusTable.LabelError
-                        (AllPackagesLoaded records)
+                        (decodeStatusRecord >> AllPackagesLoaded records)
+                        DynamoMsg
                         conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         PackagesSinceLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems errorRecords ->
+                Dynamo.QueryItems _ errorRecords ->
                     let
                         records =
                             List.append readyRecords errorRecords
@@ -294,12 +323,12 @@ update msg conn =
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
         AllPackagesLoaded readyRecords loadResult ->
             case loadResult of
-                Dynamo.BatchGetItems errorRecords ->
+                Dynamo.QueryItems _ errorRecords ->
                     let
                         records =
                             List.append readyRecords errorRecords
@@ -341,7 +370,7 @@ update msg conn =
                     in
                     respond ( 200, Body.json jsonRecords ) conn
 
-                Dynamo.BatchGetError dbErrorMsg ->
+                Dynamo.QueryError dbErrorMsg ->
                     error dbErrorMsg conn
 
 
