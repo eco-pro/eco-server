@@ -1,5 +1,7 @@
 #!/bin/bash
 
+./locate_services.py
+
 #set -m
 #./mitmdump -p 9000 -M '|https://package.elm-lang.org/|http://localhost:3000/v1/' >/dev/null 2>&1 &
 

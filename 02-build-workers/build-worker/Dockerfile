@@ -11,7 +11,7 @@ RUN apt-get update && \
 WORKDIR /tmp/workdir
 
 # Install Python stuff.
-RUN pip3 install boto3 requests
+RUN pip3 install boto3 requests python-dotenv
 
 # Install mitmproxy
 # Make sure default locale is set up or mitmproxy will complain about
