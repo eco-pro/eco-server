@@ -10,4 +10,5 @@ Run the Docker container interactively, using OFFLINE_MODE:
 
     > docker run -it \
       -e OFFLINE_MODE=true \
+      --network="host" \
       eco-pro/eco-server-build-worker:v1
