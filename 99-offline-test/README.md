@@ -1,4 +1,4 @@
-### Install localstack
+### Development Test Environment
 
 https://github.com/localstack/localstack is needed to run the test stack
 offline. Instructions on installation are available on its GitHub README.
