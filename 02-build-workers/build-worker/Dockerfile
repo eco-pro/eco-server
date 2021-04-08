@@ -34,6 +34,7 @@ ENV PATH /usr/local/bin:$PATH
 
 # Copy in the build worker scripts
 COPY worker /tmp/workdir
+COPY locate_services.py /tmp/workdir
 COPY build_elm.py /tmp/workdir
 
 # Run some build jobs
