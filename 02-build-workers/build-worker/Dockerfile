@@ -11,7 +11,7 @@ RUN apt-get update && \
 WORKDIR /tmp/workdir
 
 # Install Python stuff.
-RUN pip3 install boto3 requests python-dotenv
+RUN pip3 install boto3 requests "python-dotenv[cli]"
 
 # Install mitmproxy
 # Make sure default locale is set up or mitmproxy will complain about
@@ -36,6 +36,9 @@ ENV PATH /usr/local/bin:$PATH
 COPY worker /tmp/workdir
 COPY locate_services.py /tmp/workdir
 COPY build_elm.py /tmp/workdir
+COPY .env.offline /tmp/workdir
+COPY .env.online /tmp/workdir
+
 
 # Run some build jobs
 ENTRYPOINT ./worker

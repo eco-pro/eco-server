@@ -1,6 +1,13 @@
 #!/bin/bash
 
-./locate_services.py
+# Check if using offline mode.
+if [[ -z "${OFFLINE_MODE}" ]]; then
+  ENV=.env.online
+else
+  ENV=.env.offline
+fi
+
+dotenv -f $ENV run -- ./locate_services.py
 
 set -m
 ./mitmdump -p 9000 -M '|https://package.elm-lang.org/|http://localhost:3000/v1/' >/dev/null 2>&1 &
@@ -9,6 +16,6 @@ sleep 1s
 
 #https_proxy=http://127.0.0.1:9000 \
 #REQUESTS_CA_BUNDLE=~/.mitmproxy/mitmproxy-ca-cert.pem \
-./build_elm.py
+dotenv -f $ENV run -- dotenv -f .env.processed run -- ./build_elm.py
 
 trap "killall mitmdump" EXIT

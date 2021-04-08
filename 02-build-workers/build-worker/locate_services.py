@@ -15,20 +15,32 @@ import boto3
 from dotenv import load_dotenv, find_dotenv
 from botocore.exceptions import ClientError
 
-load_dotenv(find_dotenv())
+
+print("====== Eco-Server Elm Service Location Script ======")
 
 offline_mode = os.environ.get('OFFLINE_MODE')
 
-with open('proc_env', 'w') as proc_env:
+def print_config(config):
+    print("\n==== Configuration:\n")
+    for item in config.items():
+        if item[1]:
+            print("    " + item[0] + " = " + item[1])
+
+
+with open('.env.processed', 'w') as proc_env:
 
     if offline_mode == 'true':
+        print("\n==== Running in offline mode.")
         # Use OFFLINE_MODE=true
         config = {
             'PACKAGE_API_ROOT': os.environ.get('PACKAGE_API_ROOT')
         }
 
-        print(config)
+        print_config(config)
+
+        #print(config)
     else:
+        print("\n==== Running in online mode, using service discovery.")
         # Use OFFLINE_MODE=false
         config = {
             'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'),
@@ -36,14 +48,16 @@ with open('proc_env', 'w') as proc_env:
             'BUILD_API_SERVICE': 'build-api-service'
         }
 
-        print(config)
+        print_config(config)
+
+        #print(config)
 
         session = boto3.session.Session()
-        print(session.get_credentials().get_frozen_credentials())
+        #print(session.get_credentials().get_frozen_credentials())
 
 
         # Find the build API service.
-        print("\n=== Looking for the build API service.")
+        print("\n==== Looking for the build API service.")
         discovery_namespace = config['DISCOVERY_NAMESPACE']
         build_api_service = config['BUILD_API_SERVICE']
 
@@ -62,3 +76,5 @@ with open('proc_env', 'w') as proc_env:
 
 
     proc_env.write('PACKAGE_API_ROOT=' + config['PACKAGE_API_ROOT'])
+
+print("\n==== Service config written to '.env.processed'.\n\n")

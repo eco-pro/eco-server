@@ -19,8 +19,6 @@ from botocore.exceptions import ClientError
 
 print("====== Eco-Server Elm Package Build Script ======")
 
-load_dotenv(find_dotenv())
-
 config = {
     'OFFLINE_MODE': os.environ.get('OFFLINE_MODE'),
     'AWS_ENDPOINT_URL': os.environ.get('AWS_ENDPOINT_URL'),
