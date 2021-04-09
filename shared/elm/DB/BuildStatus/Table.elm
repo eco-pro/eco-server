@@ -18,11 +18,11 @@ module DB.BuildStatus.Table exposing
     )
 
 import Elm.Error
+import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Elm.Project exposing (Project)
 import Elm.Version exposing (Version)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Elm.FQPackage as FQPackage exposing (FQPackage)
 import Time exposing (Posix)
 import Url exposing (Url)
 
@@ -52,6 +52,7 @@ type ErrorReason
     | ErrorElmJsonInvalid String
     | ErrorNotElmPackage
     | ErrorUnsupportedElmVersion
+    | ErrorCompileTimeout
     | ErrorCompileFailed
         { compilerVersion : Version
         , reportJson : Value
@@ -150,6 +151,9 @@ encodeErrorReason reason =
         ErrorUnsupportedElmVersion ->
             [ ( "errorReason", Encode.string "unsupported-elm-version" ) ]
 
+        ErrorCompileTimeout ->
+            [ ( "errorReason", Encode.string "compile-timeout" ) ]
+
         ErrorCompileFailed { compilerVersion, reportJson, compileLogUrl, jsonReportUrl, archive } ->
             [ ( "errorReason", Encode.string "compile-failed" )
             , ( "compilerVersion", Elm.Version.encode compilerVersion )
@@ -234,6 +238,9 @@ errorReasonDecoder =
 
                     "unsupported-elm-version" ->
                         Decode.succeed ErrorUnsupportedElmVersion
+
+                    "compile-timeout" ->
+                        Decode.succeed ErrorCompileTimeout
 
                     "compile-failed" ->
                         Decode.succeed
