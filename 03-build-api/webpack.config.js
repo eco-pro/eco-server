@@ -24,10 +24,9 @@ const config = {
       }
     }]
   },
-
   plugins: [
-          new filewatcherPlugin({watchFileRegex: ['../shared/**/*.js', '../shared/**/*.elm']})
-      ],
+    new filewatcherPlugin({watchFileRegex: ['../shared/**/*.js', '../shared/**/*.elm']})
+  ]
 };
 
 if (process.env.NODE_ENV === 'production') {
