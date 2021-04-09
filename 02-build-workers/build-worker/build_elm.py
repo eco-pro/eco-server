@@ -205,7 +205,12 @@ def compile_elm(author,
         elmResult = subprocess.run([compiler, "make", "--docs=docs.json"],
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT,
-                                   cwd=workingDir)
+                                   cwd=workingDir,
+                                   timeout=60)
+    except TimeoutExpired:
+        print("* Compilation timed out.")
+        report_error(seq, "compile-timeout")
+        return True;
     except IOError:
         print("** Fatal Error: Cannot run compiler command " + compiler)
         quit()
@@ -223,10 +228,20 @@ def compile_elm(author,
     if elmResult.returncode != 0:
         print("* Error: Compile failed.")
 
-        elmReportResult = subprocess.run(
-            [compiler, "make", "--report=json"],
-            capture_output=True,
-            cwd=workingDir)
+        try:
+            elmReportResult = subprocess.run(
+                [compiler, "make", "--report=json"],
+                capture_output=True,
+                cwd=workingDir,
+                timeout=60)
+        except TimeoutExpired:
+            print("* Re-compilation for JSON error report timed out.")
+            report_error(seq, "compile-timeout")
+            return True;
+        except IOError:
+            print("** Fatal Error: Cannot run compiler command " + compiler)
+            quit()
+
         errorString = elmReportResult.stderr.decode('utf-8')
 
         with open(json_report_file_name, "w") as json_report:
