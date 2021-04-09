@@ -74,6 +74,7 @@ main =
 type Route
     = Refresh
     | NextJob
+    | SpecificJob Int
     | PackageError Int
     | PackageReady Int
 
@@ -84,6 +85,7 @@ routeParser =
         [ -- The root site build job API
           map Refresh (s "root-site" </> s "packages" </> s "refresh")
         , map NextJob (s "root-site" </> s "packages" </> s "nextjob")
+        , map SpecificJob (s "root-site" </> s "packages" </> s "job" </> Url.Parser.int)
         , map PackageError (s "root-site" </> s "packages" </> Url.Parser.int </> s "error")
         , map PackageReady (s "root-site" </> s "packages" </> Url.Parser.int </> s "ready")
         ]
@@ -108,6 +110,10 @@ router conn =
                 )
                 conn
 
+        -- ( GET, SpecificJob seq ) ->
+        --     RootSiteImportsQueries.getBySeq seq
+        --         ProvideJobDetails
+        --         conn
         ( POST, PackageError seq ) ->
             RootSiteImportsQueries.getBySeq seq (GetRootSiteImportAndThen (updateAsError seq)) conn
 
@@ -133,7 +139,7 @@ type Msg
     | SkipBelowElm19Job (List RootSiteImportsTable.Record) MarkersTable.Record Posix Dynamo.PutResponse
     | PackagesSave MarkersTable.Record Posix Dynamo.PutResponse
     | SaveJobState MarkersTable.Record (Dynamo.GetResponse RootSiteImportsTable.Record)
-    | ProvideJobDetails MarkersTable.Record RootSiteImportsTable.Record Dynamo.PutResponse
+    | ProvideJobDetails RootSiteImportsTable.Record Dynamo.PutResponse
     | SavedSeqNoState Dynamo.PutResponse
     | MarkJobComplete Int Posix Dynamo.PutResponse
 
@@ -171,7 +177,7 @@ customLogger msg =
         SaveJobState _ _ ->
             "SaveJobState"
 
-        ProvideJobDetails _ _ _ ->
+        ProvideJobDetails _ _ ->
             "ProvideJobDetails"
 
         SavedSeqNoState _ ->
@@ -325,7 +331,7 @@ update msg conn =
                                     | processing = markerRecord.processedTo + 1
                                     , updatedAt = posix
                                 }
-                                (ProvideJobDetails markerRecord rootSiteImportRecord)
+                                (ProvideJobDetails rootSiteImportRecord)
                                 conn
                         )
                     )
@@ -333,7 +339,7 @@ update msg conn =
                 Dynamo.GetError dbErrorMsg ->
                     error dbErrorMsg conn
 
-        ProvideJobDetails markerRecord { seq, fqPackage } putResult ->
+        ProvideJobDetails { seq, fqPackage } putResult ->
             case putResult of
                 Dynamo.PutOk ->
                     let
