@@ -12,6 +12,7 @@
     "@the-sett/serverless-elm-bridge": "^4.0.0"
   },
   "devDependencies": {
+    "filewatcher-webpack-plugin": "^1.2.0",
     "serverless-dotenv-plugin": "^3.9.0"
   }
 }

@@ -1,6 +1,7 @@
 const path = require('path');
 const webpack = require('webpack');
 const slsw = require('serverless-webpack');
+const filewatcherPlugin = require("filewatcher-webpack-plugin");
 
 const config = {
   entry: slsw.lib.entries,
@@ -23,6 +24,10 @@ const config = {
       }
     }]
   },
+
+  plugins: [
+          new filewatcherPlugin({watchFileRegex: ['../shared/**/*.js', '../shared/**/*.elm']})
+      ],
 };
 
 if (process.env.NODE_ENV === 'production') {
