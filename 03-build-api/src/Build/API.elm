@@ -105,14 +105,19 @@ router conn =
                     (\record innerConn ->
                         RootSiteImportsQueries.getBySeq (record.processedTo + 1)
                             (SaveJobState record)
-                            conn
+                            innerConn
                     )
                 )
                 conn
 
         -- ( GET, SpecificJob seq ) ->
         --     RootSiteImportsQueries.getBySeq seq
-        --         ProvideJobDetails
+        --         (let
+        --             job =
+        --                 jobResponse seq fqPackage
+        --          in
+        --          respond ( 200, Body.json (encodeBuildJob job) ) conn
+        --         )
         --         conn
         ( POST, PackageError seq ) ->
             RootSiteImportsQueries.getBySeq seq (GetRootSiteImportAndThen (updateAsError seq)) conn
@@ -344,30 +349,7 @@ update msg conn =
                 Dynamo.PutOk ->
                     let
                         job =
-                            { seq = seq
-                            , fqPackage = fqPackage
-                            , zipUrl =
-                                Url.Builder.crossOrigin
-                                    "https://github.com"
-                                    [ Elm.Package.toString fqPackage.name
-                                    , "archive"
-                                    , Elm.Version.toString fqPackage.version ++ ".zip"
-                                    ]
-                                    []
-                            , author =
-                                Elm.Package.toString fqPackage.name
-                                    |> String.split "/"
-                                    |> List.head
-                                    |> Maybe.withDefault ""
-                            , name =
-                                Elm.Package.toString fqPackage.name
-                                    |> String.split "/"
-                                    |> List.tail
-                                    |> Maybe.map List.head
-                                    |> Maybe.Extra.join
-                                    |> Maybe.withDefault ""
-                            , version = fqPackage.version
-                            }
+                            jobResponse seq fqPackage
                     in
                     respond ( 200, Body.json (encodeBuildJob job) ) conn
 
@@ -526,6 +508,34 @@ encodeBuildJob val =
         , ( "name", Encode.string val.name )
         , ( "version", Elm.Version.encode val.version )
         ]
+
+
+jobResponse : Int -> FQPackage -> BuildJob
+jobResponse seq fqPackage =
+    { seq = seq
+    , fqPackage = fqPackage
+    , zipUrl =
+        Url.Builder.crossOrigin
+            "https://github.com"
+            [ Elm.Package.toString fqPackage.name
+            , "archive"
+            , Elm.Version.toString fqPackage.version ++ ".zip"
+            ]
+            []
+    , author =
+        Elm.Package.toString fqPackage.name
+            |> String.split "/"
+            |> List.head
+            |> Maybe.withDefault ""
+    , name =
+        Elm.Package.toString fqPackage.name
+            |> String.split "/"
+            |> List.tail
+            |> Maybe.map List.head
+            |> Maybe.Extra.join
+            |> Maybe.withDefault ""
+    , version = fqPackage.version
+    }
 
 
 
