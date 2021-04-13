@@ -110,15 +110,15 @@ router conn =
                 )
                 conn
 
-        -- ( GET, SpecificJob seq ) ->
-        --     RootSiteImportsQueries.getBySeq seq
-        --         (let
-        --             job =
-        --                 jobResponse seq fqPackage
-        --          in
-        --          respond ( 200, Body.json (encodeBuildJob job) ) conn
-        --         )
-        --         conn
+        ( GET, SpecificJob seq ) ->
+            RootSiteImportsQueries.getBySeq seq
+                (GetRootSiteImportAndThen
+                    (\{ fqPackage } innerConn ->
+                        respond ( 200, Body.json (jobResponse seq fqPackage |> encodeBuildJob) ) innerConn
+                    )
+                )
+                conn
+
         ( POST, PackageError seq ) ->
             RootSiteImportsQueries.getBySeq seq (GetRootSiteImportAndThen (updateAsError seq)) conn
 
