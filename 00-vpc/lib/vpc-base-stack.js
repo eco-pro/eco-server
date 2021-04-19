@@ -1,5 +1,5 @@
 import { CfnOutput, RemovalPolicy, Duration, Tags } from '@aws-cdk/core';
-import * as ec2 from '@aws-cdk/aws-ec2';
+import { Vpc, SubnetType, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService } from '@aws-cdk/aws-ec2';
 import * as servicediscovery from '@aws-cdk/aws-servicediscovery';
 import * as sst from '@serverless-stack/resources';
 
@@ -19,10 +19,19 @@ export default class VpcBaseStack extends sst.Stack {
     const app = this.node.root;
 
     // VPC Network Segment.
-    const vpc = new ec2.Vpc(this, "vpc", {
+    const vpc = new Vpc(this, "vpc", {
       maxAzs: 1,
       enableDnsSupport: true,
-      enableDnsHostnames: true
+      enableDnsHostnames: true,
+      natGateways: 0,
+      subnetConfiguration: [
+        { cidrMask: 23, name: 'Isolated', subnetType: SubnetType.ISOLATED }
+      ],
+      gatewayEndpoints: {
+        S3: {
+          service: GatewayVpcEndpointAwsService.S3,
+        },
+      }
     });
 
     Tags.of(vpc).add('vpc-name', 'eco-server-vpc');
@@ -30,6 +39,11 @@ export default class VpcBaseStack extends sst.Stack {
     new CfnOutput(this, "vpc-id", {
      value: vpc.vpcId,
      exportName: app.logicalPrefixedName("VpcId")
+    });
+
+    // Add an interface endpoint
+    vpc.addInterfaceEndpoint('LambdaEndpoint', {
+      service: InterfaceVpcEndpointAwsService.LAMBDA,
     });
 
     // const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
