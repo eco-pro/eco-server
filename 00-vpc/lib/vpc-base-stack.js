@@ -8,8 +8,8 @@ Set up the VPC for the package server. This includes:
 
 - The VPC itself, tagged with:
     vpc-name = eco-server-vpc
-- A VPC Interface Endpoint (a Private Link to API gateway).
-- A Private DNS Namespace for the VPC as a service registry.
+- A VPC Interface Endpoint to AWS Lambda.
+- A Private Namespace for the VPC as a service registry.
 
 */
 export default class VpcBaseStack extends sst.Stack {
@@ -21,8 +21,8 @@ export default class VpcBaseStack extends sst.Stack {
     // VPC Network Segment.
     const vpc = new Vpc(this, "vpc", {
       maxAzs: 1,
-      enableDnsSupport: true,
-      enableDnsHostnames: true,
+      enableDnsSupport: false,
+      enableDnsHostnames: false,
       natGateways: 0,
       subnetConfiguration: [
         { cidrMask: 23, name: 'Isolated', subnetType: SubnetType.ISOLATED }
@@ -41,25 +41,12 @@ export default class VpcBaseStack extends sst.Stack {
      exportName: app.logicalPrefixedName("VpcId")
     });
 
-    // Add an interface endpoint
+    // Add an interface endpoint for invoking Lambdas.
     vpc.addInterfaceEndpoint('LambdaEndpoint', {
       service: InterfaceVpcEndpointAwsService.LAMBDA,
     });
 
-    // const vpcEndpoint = new ec2.InterfaceVpcEndpoint(this, 'vpc-endpoint', {
-    //   vpc,
-    //   service: {
-    //     name: 'com.amazonaws.eu-west-2.execute-api',
-    //     port: 443
-    //   },
-    //   privateDnsEnabled: true
-    // })
-    //
-    // new CfnOutput(this, "vpc-endpoint-id", {
-    //  value: vpcEndpoint.vpcEndpointId,
-    //  exportName: app.logicalPrefixedName("VpcEndpointId")
-    // });
-
+    // Add a service discovery namespace.
     const namespace = new servicediscovery.PrivateDnsNamespace(this, 'service-namespace', {
       name: 'mydomain.com',
       vpc
