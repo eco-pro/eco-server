@@ -25,13 +25,14 @@ export default class VpcBaseStack extends sst.Stack {
       enableDnsHostnames: false,
       natGateways: 0,
       subnetConfiguration: [
-        { cidrMask: 23, name: 'Isolated', subnetType: SubnetType.ISOLATED }
-      ],
-      gatewayEndpoints: {
-        S3: {
-          service: GatewayVpcEndpointAwsService.S3,
-        },
-      }
+        //{ cidrMask: 23, name: 'Isolated', subnetType: SubnetType.ISOLATED }
+        { cidrMask: 23, name: 'Public', subnetType: SubnetType.PUBLIC }
+      ]
+      // gatewayEndpoints: {
+      //   S3: {
+      //     service: GatewayVpcEndpointAwsService.S3,
+      //   },
+      // }
     });
 
     Tags.of(vpc).add('vpc-name', 'eco-server-vpc');
@@ -42,9 +43,9 @@ export default class VpcBaseStack extends sst.Stack {
     });
 
     // Add an interface endpoint for invoking Lambdas.
-    vpc.addInterfaceEndpoint('LambdaEndpoint', {
-      service: InterfaceVpcEndpointAwsService.LAMBDA,
-    });
+    // vpc.addInterfaceEndpoint('LambdaEndpoint', {
+    //   service: InterfaceVpcEndpointAwsService.LAMBDA,
+    // });
 
     // Add a service discovery namespace.
     const namespace = new servicediscovery.PrivateDnsNamespace(this, 'service-namespace', {
