@@ -1,30 +1,18 @@
 {
   "vpc-provider:account=345745834314:filter.tag:vpc-name=eco-server-vpc:region=eu-west-2:returnAsymmetricSubnets=true": {
-    "vpcId": "vpc-04a61b972b431c5a0",
+    "vpcId": "vpc-0a7a6c53b691a8487",
     "vpcCidrBlock": "10.0.0.0/16",
     "availabilityZones": [],
     "subnetGroups": [
-      {
-        "name": "Private",
-        "type": "Private",
-        "subnets": [
-          {
-            "subnetId": "subnet-0d1c8318762947671",
-            "cidr": "10.0.128.0/17",
-            "availabilityZone": "eu-west-2a",
-            "routeTableId": "rtb-06979a9e7eb13ae4c"
-          }
-        ]
-      },
       {
         "name": "Public",
         "type": "Public",
         "subnets": [
           {
-            "subnetId": "subnet-0b17df976fc918705",
-            "cidr": "10.0.0.0/17",
+            "subnetId": "subnet-0e5980a69acee934e",
+            "cidr": "10.0.0.0/23",
             "availabilityZone": "eu-west-2a",
-            "routeTableId": "rtb-006194437980086e1"
+            "routeTableId": "rtb-085daa0bd7a2090b8"
           }
         ]
       }
