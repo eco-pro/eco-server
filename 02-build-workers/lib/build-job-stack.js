@@ -47,8 +47,6 @@ export default class BuildJobStack extends sst.Stack {
       image: buildJobImage,
       logging: logging,
       environment: {
-        'PACKAGE_API_ROOT': 'https://build-api-service.mydomain.com/',
-        'S3_ENDPOINT': 'https://s3buckets.wherever.com/',
         'PACKAGE_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmPackageBucketName')),
         'BUILD_LOGS_BUCKET_NAME': Fn.importValue(app.logicalPrefixedName('ElmBuildLogsBucketName'))
       }
@@ -73,49 +71,49 @@ export default class BuildJobStack extends sst.Stack {
         actions: ['s3:*']
       }));
 
-    buildTask.addToTaskRolePolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        resources: [ '*' ],
-        actions: [
-          'logs:CreateLogStream',
-          'logs:PutLogEvents']
-      }));
-
-    buildTask.addToExecutionRolePolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        resources: [ '*' ],
-        actions: [
-          'ecr:BatchCheckLayerAvailability',
-          'ecr:GetDownloadUrlForLayer',
-          'ecr:BatchGetImage',
-          'ecr:GetAuthorizationToken']
-      }));
-
-    buildTask.addToExecutionRolePolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        resources: [ '*' ],
-        actions: [
-          'logs:CreateLogStream',
-          'logs:PutLogEvents']
-      }));
-
-    buildTask.addToExecutionRolePolicy(
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        resources: [ '*' ],
-        actions: [
-          "kms:*",
-          "secretsmanager:*",
-          "ssm:*",
-          "s3:*",
-          "ecr:*",
-          "ecs:*",
-          "ec2:*"
-      ]
-    }));
+    // buildTask.addToTaskRolePolicy(
+    //   new PolicyStatement({
+    //     effect: Effect.ALLOW,
+    //     resources: [ '*' ],
+    //     actions: [
+    //       'logs:CreateLogStream',
+    //       'logs:PutLogEvents']
+    //   }));
+    //
+    // buildTask.addToExecutionRolePolicy(
+    //   new PolicyStatement({
+    //     effect: Effect.ALLOW,
+    //     resources: [ '*' ],
+    //     actions: [
+    //       'ecr:BatchCheckLayerAvailability',
+    //       'ecr:GetDownloadUrlForLayer',
+    //       'ecr:BatchGetImage',
+    //       'ecr:GetAuthorizationToken']
+    //   }));
+    //
+    // buildTask.addToExecutionRolePolicy(
+    //   new PolicyStatement({
+    //     effect: Effect.ALLOW,
+    //     resources: [ '*' ],
+    //     actions: [
+    //       'logs:CreateLogStream',
+    //       'logs:PutLogEvents']
+    //   }));
+    //
+    // buildTask.addToExecutionRolePolicy(
+    //   new PolicyStatement({
+    //     effect: Effect.ALLOW,
+    //     resources: [ '*' ],
+    //     actions: [
+    //       "kms:*",
+    //       "secretsmanager:*",
+    //       "ssm:*",
+    //       "s3:*",
+    //       "ecr:*",
+    //       "ecs:*",
+    //       "ec2:*"
+    //   ]
+    // }));
 
     new CfnOutput(this, "build-task-arn", {
       value: buildTask.taskDefinitionArn,
