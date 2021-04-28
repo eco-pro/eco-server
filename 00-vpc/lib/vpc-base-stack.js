@@ -42,7 +42,7 @@ export default class VpcBaseStack extends sst.Stack {
      exportName: app.logicalPrefixedName("VpcId")
     });
 
-    // Add an interface endpoint for invoking Lambdas.
+    // Add an interface endpoint for invoking ECR and Secrets Manager
     // vpc.addInterfaceEndpoint('LambdaEndpoint', {
     //   service: InterfaceVpcEndpointAwsService.LAMBDA,
     // });
