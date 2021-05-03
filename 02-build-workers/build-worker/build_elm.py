@@ -358,7 +358,7 @@ try:
         print("3. Building the canonical Elm package as a .zip file.")
 
         try:
-            shutil.make_archive(base_name=packageName + "-" + version,
+            shutil.make_archive(base_name=author + "-" + packageName + "-" + version,
                                 format='zip',
                                 root_dir=author,
                                 base_dir=packageName + "-" + version)
