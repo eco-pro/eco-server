@@ -207,7 +207,7 @@ def compile_elm(author,
                                    stderr=subprocess.STDOUT,
                                    cwd=workingDir,
                                    timeout=60)
-    except TimeoutExpired:
+    except subprocess.TimeoutExpired:
         print("* Compilation timed out.")
         report_error(seq, "compile-timeout")
         return True;
@@ -234,7 +234,7 @@ def compile_elm(author,
                 capture_output=True,
                 cwd=workingDir,
                 timeout=60)
-        except TimeoutExpired:
+        except subprocess.TimeoutExpired:
             print("* Re-compilation for JSON error report timed out.")
             report_error(seq, "compile-timeout")
             return True;
