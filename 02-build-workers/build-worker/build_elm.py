@@ -77,7 +77,7 @@ def calc_zip_file_sha1(zip_file_name):
 
     # Calculate a sha1 over the .zip file itself
     zip_file_sha1 = hashlib.sha1()
-    with open(packageName + "-" + version + ".zip", 'rb') as f:
+    with open(zip_file_name, 'rb') as f:
         while True:
             block = f.read(blocksize)
             if not block:
