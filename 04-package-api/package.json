@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "filewatcher-webpack-plugin": "^1.2.0",
+    "serverless-domain-manager": "^5.1.0",
     "serverless-dotenv-plugin": "^3.9.0"
   }
 }
