@@ -57,7 +57,7 @@ def calc_zip_file_sha1(zip_file_name):
     blocksize = 1024**2  # 1M chunks
 
     # Calculate the sha1 of all files in the archive, ignore directories.
-    with zipfile.ZipFile(packageName + "-" + version + ".zip", "r") as archive:
+    with zipfile.ZipFile(zip_file_name, "r") as archive:
         all_files = [x for x in archive.namelist() if not x.endswith('/')]
         all_file_sha1s = []
         for fname in all_files:
