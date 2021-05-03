@@ -367,7 +367,7 @@ try:
             report_error(seq, "package-renamed")
             continue
 
-        archive_name = packageName + "-" + version + ".zip"
+        archive_name = author + "-" + packageName + "-" + version + ".zip"
         zip_hash, content_hash = calc_zip_file_sha1(archive_name)
 
         # Extract the elm.json, and POST it to the package server.
