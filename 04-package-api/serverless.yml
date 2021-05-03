@@ -6,6 +6,13 @@ custom:
   serverless-offline:
     httpPort: 4000
     lambdaPort: 4002
+  customDomain:
+    domainName: package.eco-elm.org
+    createRoute53Record: true
+    endpointType: 'regional'
+    apiType: rest
+    autoDomain: false
+    stage: ${self:custom.stage}
 
 provider:
   name: aws
@@ -35,6 +42,7 @@ plugins:
   - serverless-webpack
   - serverless-offline
   - serverless-dotenv-plugin
+  - serverless-domain-manager
 
 functions:
   packages:
